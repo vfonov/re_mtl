@@ -225,7 +225,7 @@ $(document).ready(function () {
 <li><a href="#triplex-profitability-rent-per-yeartriplex-total-price">Triplex Profitability (rent per year/triplex total price)</a></li>
 </ul></li>
 </ul></li>
-<li><a href="#plexes-longitudinal-price-model-ahuntsic-rosemont-villeray">Plexes Longitudinal price model, Ahuntsic, Rosemont, Villeray</a></li>
+<li><a href="#plexes-longitudinal-price-model-plateau-ahuntsic-rosemont-villeray">Plexes Longitudinal price model: Plateau, Ahuntsic, Rosemont, Villeray</a></li>
 </ul>
 </div>
 
@@ -569,7 +569,7 @@ p</code></pre>
 <div id="plex-price-estimate" class="section level2">
 <h2>Plex price estimate</h2>
 <pre class="r"><code>selected_mls=17758383
-max_distance=2000# 2km
+max_distance=2000 # 2km
 
 plex_pe&lt;-prop_geo_p %&gt;% filter(type!=&#39;Apartment&#39;, type!=&#39;House&#39;) %&gt;% 
   mutate(parking=as.factor(parking&gt;0), stories=as.factor(stories),type=as.factor(type))
@@ -837,8 +837,8 @@ tm_shape(osm_mtl)+tm_rgb(alpha=0.6)+
 </div>
 </div>
 </div>
-<div id="plexes-longitudinal-price-model-ahuntsic-rosemont-villeray" class="section level1">
-<h1>Plexes Longitudinal price model, Ahuntsic, Rosemont, Villeray</h1>
+<div id="plexes-longitudinal-price-model-plateau-ahuntsic-rosemont-villeray" class="section level1">
+<h1>Plexes Longitudinal price model: Plateau, Ahuntsic, Rosemont, Villeray</h1>
 <pre><code>## 
 ## Family: inverse.gaussian 
 ## Link function: log 
