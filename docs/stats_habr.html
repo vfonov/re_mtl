@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+<head>
+
+<meta charset="utf-8" />
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="generator" content="pandoc" />
+
+
+
+
+<title>Montreal real estate statistics, HABR version</title>
+
+<script src="site_libs/jquery-1.11.3/jquery.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="site_libs/bootstrap-3.3.5/css/united.min.css" rel="stylesheet" />
+<script src="site_libs/bootstrap-3.3.5/js/bootstrap.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/html5shiv.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/respond.min.js"></script>
+<script src="site_libs/navigation-1.1/tabsets.js"></script>
+<link href="site_libs/highlightjs-9.12.0/default.css" rel="stylesheet" />
+<script src="site_libs/highlightjs-9.12.0/highlight.js"></script>
+
+<style type="text/css">code{white-space: pre;}</style>
+<style type="text/css">
+  pre:not([class]) {
+    background-color: white;
+  }
+</style>
+<script type="text/javascript">
+if (window.hljs) {
+  hljs.configure({languages: []});
+  hljs.initHighlightingOnLoad();
+  if (document.readyState && document.readyState === "complete") {
+    window.setTimeout(function() { hljs.initHighlighting(); }, 0);
+  }
+}
+</script>
+
+
+
+<style type="text/css">
+h1 {
+  font-size: 34px;
+}
+h1.title {
+  font-size: 38px;
+}
+h2 {
+  font-size: 30px;
+}
+h3 {
+  font-size: 24px;
+}
+h4 {
+  font-size: 18px;
+}
+h5 {
+  font-size: 16px;
+}
+h6 {
+  font-size: 12px;
+}
+.table th:not([align]) {
+  text-align: left;
+}
+</style>
+
+
+
+
+<style type = "text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+code {
+  color: inherit;
+  background-color: rgba(0, 0, 0, 0.04);
+}
+img {
+  max-width:100%;
+  height: auto;
+}
+.tabbed-pane {
+  padding-top: 12px;
+}
+.html-widget {
+  margin-bottom: 20px;
+}
+button.code-folding-btn:focus {
+  outline: none;
+}
+summary {
+  display: list-item;
+}
+</style>
+
+
+
+<!-- tabsets -->
+
+<style type="text/css">
+.tabset-dropdown > .nav-tabs {
+  display: inline-table;
+  max-height: 500px;
+  min-height: 44px;
+  overflow-y: auto;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.tabset-dropdown > .nav-tabs > li.active:before {
+  content: "";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li.active:before {
+  content: "&#xe258;";
+  border: none;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open:before {
+  content: "";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs > li.active {
+  display: block;
+}
+
+.tabset-dropdown > .nav-tabs > li > a,
+.tabset-dropdown > .nav-tabs > li > a:focus,
+.tabset-dropdown > .nav-tabs > li > a:hover {
+  border: none;
+  display: inline-block;
+  border-radius: 4px;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li {
+  display: block;
+  float: none;
+}
+
+.tabset-dropdown > .nav-tabs > li {
+  display: none;
+}
+</style>
+
+<script>
+$(document).ready(function () {
+  window.buildTabsets("TOC");
+});
+
+$(document).ready(function () {
+  $('.tabset-dropdown > .nav-tabs > li').click(function () {
+    $(this).parent().toggleClass('nav-tabs-open')
+  });
+});
+</script>
+
+<!-- code folding -->
+
+
+
+
+</head>
+
+<body>
+
+
+<div class="container-fluid main-container">
+
+
+
+
+<div class="fluid-row" id="header">
+
+
+
+<h1 class="title toc-ignore">Montreal real estate statistics, HABR version</h1>
+
+</div>
+
+<div id="TOC">
+<ul>
+<li><a href="#condo-price">Condo price</a><ul>
+<li><a href="#neighborhood-map">Neighborhood map</a></li>
+<li><a href="#neighbourhood-prices">neighbourhood prices,</a><ul>
+<li><a href="#simple-linear-model">simple linear model</a></li>
+<li><a href="#glm-model">glm model</a></li>
+<li><a href="#price-per-square-foot">price per square foot</a></li>
+<li><a href="#longitudinal-condo-price-model-loess-smoothihg">Longitudinal condo price model: Loess smoothihg</a></li>
+<li><a href="#longitudinal-condo-price-modelgam-model">Longitudinal condo price model:GAM model</a></li>
+<li><a href="#longitudinal-condo-price-model-prediction">Longitudinal condo price model: prediction</a></li>
+<li><a href="#longitudinal-condo-price-model-relative-price-change">Longitudinal condo price model: relative price change</a></li>
+</ul></li>
+<li><a href="#condo-price-sqft-relative-to-start">Condo price (sqft) relative to start</a><ul>
+<li><a href="#survival-analysis">survival analysis</a></li>
+</ul></li>
+<li><a href="#plex-price-estimate">Plex price estimate</a><ul>
+<li><a href="#per-sqft-price-regression-model">per sqft price regression model</a></li>
+</ul></li>
+</ul></li>
+<li><a href="#spatial-prices">Spatial prices</a><ul>
+<li><a href="#spatial-statistics-rent-of-4-12">Spatial statistics: rent of 4 1/2</a><ul>
+<li><a href="#simple-median-over-quartier">Simple median over quartier</a></li>
+<li><a href="#rental-prices-spatial-model-whole-island">Rental prices spatial model, whole island</a></li>
+<li><a href="#rental-price-map-for-4-12">Rental price map for 4 1/2</a></li>
+<li><a href="#rental-prices-spatial-model-central-part">Rental prices spatial model, central part</a></li>
+<li><a href="#rental-price-map-for-4-12-1">Rental price map for 4 1/2</a></li>
+<li><a href="#plex-price-spatial-model">Plex price spatial model</a></li>
+<li><a href="#price-per-sqft-for-a-triplex-with-3br-and-parking-in-roi">Price per sqft for a triplex with 3br and parking in ROI</a></li>
+<li><a href="#area-for-a-triplex-with-3br-and-parking-in-roi">area for a triplex with 3br and parking in ROI</a></li>
+<li><a href="#triplex-profitability-rent-per-yeartriplex-total-price">Triplex Profitability (rent per year/triplex total price)</a></li>
+</ul></li>
+</ul></li>
+<li><a href="#plexes-longitudinal-price-model-ahuntsic-rosemont-villeray">Plexes Longitudinal price model, Ahuntsic, Rosemont, Villeray</a></li>
+</ul>
+</div>
+
+<div id="condo-price" class="section level1">
+<h1>Condo price</h1>
+<div id="neighborhood-map" class="section level2">
+<h2>Neighborhood map</h2>
+<pre class="r"><code>plateau&lt;-mtl_p%&gt;%filter(nom_arr==&#39;Le Plateau-Mont-Royal&#39;)%&gt;%st_buffer(dist=0)
+
+# near the border between two
+neighbourhood&lt;-mtl_p%&gt;%filter(nom_qr %in% c(&quot;Saint-Louis&quot;, &quot;Milton-Parc&quot;))%&gt;%summarize()
+
+
+if(file.exists(&quot;osm_neighbourhood.RDS&quot;)){
+  osm_neighbourhood&lt;-readRDS(file=&quot;osm_neighbourhood.RDS&quot;)
+} else {
+  # osm understands information in 4326 projection
+  osm_neighbourhood&lt;-read_osm(st_bbox(neighbourhood%&gt;%st_transform(4326)), type=&quot;esri&quot;) # ext=1.5,
+  # save to file to speedup runs
+  saveRDS(osm_neighbourhood, file = &quot;osm_neighbourhood.RDS&quot;)
+}
+
+# my region of interest
+ROI_p&lt;-mtl_p %&gt;% filter( nom_arr %in% 
+  c(&#39;Le Plateau-Mont-Royal&#39;,
+    &#39;Villeray–Saint-Michel–Parc-Extension&#39;,
+    &#39;Rosemont–La Petite-Patrie&#39;,
+    &quot;Ahuntsic-Cartierville&quot;,
+    &quot;Outremont&quot;,
+    &quot;Ville-Marie&quot;,
+    &quot;Le Sud-Ouest&quot;,
+    &quot;Côte-des-Neiges–Notre-Dame-de-Grâce&quot;,&quot;Verdun&quot;,&quot;Westmount&quot;,&quot;Hampstead&quot;,&quot;Côte-Saint-Luc&quot;,&quot;Saint-Laurent&quot;,&quot;Mont-Royal&quot;
+    ) ) %&gt;% st_intersection(st_geometry(mtl_land)%&gt;%st_buffer(0)) %&gt;%
+   mutate( arr=factor(nom_arr, 
+    levels=c(&#39;Le Plateau-Mont-Royal&#39;,
+    &#39;Villeray–Saint-Michel–Parc-Extension&#39;,
+    &#39;Rosemont–La Petite-Patrie&#39;,
+    &quot;Ahuntsic-Cartierville&quot;,&quot;Outremont&quot;, &quot;Ville-Marie&quot;,&quot;Le Sud-Ouest&quot;,
+    &quot;Côte-des-Neiges–Notre-Dame-de-Grâce&quot;,&quot;Verdun&quot;,&quot;Westmount&quot;,&quot;Hampstead&quot;,&quot;Côte-Saint-Luc&quot;,&quot;Saint-Laurent&quot;,&quot;Mont-Royal&quot;),
+    labels=c(&#39;Plateau&#39;,&#39;Villeray&#39;,&#39;Rosemont&#39;,&#39;Ahuntsic&#39;,&quot;Outremont&quot;,
+    &quot;Ville-Marie&quot;,&quot;Sud-Ouest&quot;,&quot;CdN-NdG&quot;,&quot;Verdun&quot;,&quot;Westmount&quot;,&quot;Hampstead&quot;,&quot;Côte-Saint-Luc&quot;,&quot;Saint-Laurent&quot;,&quot;TMR&quot;
+    )),
+     qr=as.factor(nom_qr))
+#
+if(file.exists(&quot;osm_roi.RDS&quot;)){
+  osm_roi&lt;-readRDS(file=&quot;osm_roi.RDS&quot;)
+} else {
+  osm_roi&lt;-read_osm(st_bbox(ROI_p%&gt;%st_transform(4326)), type=&quot;esri&quot;) # ext=1.5,
+  # save to file to speedup runs
+  saveRDS(osm_roi, file = &quot;osm_roi.RDS&quot;)
+}
+
+# create subset of data
+neighbors&lt;-prop_geo_p %&gt;% 
+  filter(type==&#39;Apartment&#39;, mprice&gt;0, bedrooms %in% c(1,2,3,4), area_interior&lt;10000, area_interior&gt;0) %&gt;% 
+  st_join(neighbourhood, left=F) %&gt;% 
+  mutate(bedrooms=droplevels(bedrooms), parking=as.factor(parking&gt;0))
+
+tm_shape(osm_neighbourhood) + tm_rgb(alpha=0.7)+
+  tm_shape(neighbourhood) + tm_borders(col=&#39;red&#39;,alpha=0.8)  + 
+  tm_shape(neighbors) + tm_symbols(shape=3,size=0.2,alpha=0.8) +
+  tm_shape(ref_home) + tm_symbols(col=&#39;red&#39;,shape=4,size=0.5,alpha=0.8)+
+  tm_compass(position=c(&quot;right&quot;, &quot;bottom&quot;))+
+  tm_scale_bar(position=c(&quot;left&quot;, &quot;bottom&quot;))+
+  tm_layout(scale=1.5)</code></pre>
+<p><img src="stats_habr_files/figure-html/neighborhood-1.svg" /><!-- --></p>
+</div>
+<div id="neighbourhood-prices" class="section level2">
+<h2>neighbourhood prices,</h2>
+<div id="simple-linear-model" class="section level3">
+<h3>simple linear model</h3>
+<pre class="r"><code># convert spatial object into a simple data frame with x and y 
+neighbors_&lt;-bind_cols(as.data.frame(neighbors),as.data.frame(st_coordinates(neighbors)))%&gt;%rename(x=X,y=Y) 
+  
+ggplot(neighbors_, aes(y=price, x=area_interior, col=parking))+
+  geom_point(alpha=0.7,size=2)+
+  scale_y_continuous( labels = scales::dollar)+
+  geom_smooth(method=&#39;lm&#39;)+
+  geom_vline(data=ref_home, aes(xintercept=area_interior),col=&#39;black&#39;,lty=2)+
+  coord_cartesian(xlim=c(400,2000),ylim=c(2e5,1e6))+
+  ylab(&#39;Price&#39;)+xlab(&#39;Surface sqft&#39;)</code></pre>
+<p><img src="stats_habr_files/figure-html/neighborhood_lm1-1.svg" /><!-- --></p>
+<pre class="r"><code># simple regression model
+model_price_lm &lt;- lm(mprice ~ parking:area_interior , data=neighbors_)
+
+print(summary(model_price_lm))</code></pre>
+<pre><code>## 
+## Call:
+## lm(formula = mprice ~ parking:area_interior, data = neighbors_)
+## 
+## Residuals:
+##     Min      1Q  Median      3Q     Max 
+## -369729  -64800   -9132   55880  690669 
+## 
+## Coefficients:
+##                            Estimate Std. Error t value Pr(&gt;|t|)    
+## (Intercept)                40564.16   22427.94   1.809   0.0715 .  
+## parkingFALSE:area_interior   438.79      23.57  18.616   &lt;2e-16 ***
+## parkingTRUE:area_interior    513.52      19.41  26.459   &lt;2e-16 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## Residual standard error: 129400 on 311 degrees of freedom
+## Multiple R-squared:  0.6989, Adjusted R-squared:  0.6969 
+## F-statistic: 360.9 on 2 and 311 DF,  p-value: &lt; 2.2e-16</code></pre>
+<pre class="r"><code># predict price
+print(predict(model_price_lm, ref_home, se.fit=T))</code></pre>
+<pre><code>## $fit
+##        1 
+## 443160.1 
+## 
+## $se.fit
+## [1] 10814.63
+## 
+## $df
+## [1] 311
+## 
+## $residual.scale
+## [1] 129405.7</code></pre>
+<pre class="r"><code>neighbors_$pred&lt;- predict(model_price_lm)
+neighbors_$res &lt;- neighbors_$mprice-neighbors_$pred
+
+ggplot(neighbors_, aes(x=pred, y=res) ) +
+  geom_point(alpha=0.7,size=2)+
+  scale_y_continuous(labels = scales::dollar )+
+  scale_x_continuous(labels = scales::dollar )+
+  xlab(&#39;predicted&#39;)+ylab(&#39;residuals&#39;)</code></pre>
+<p><img src="stats_habr_files/figure-html/neighborhood_lm_resid-1.svg" /><!-- --></p>
+</div>
+<div id="glm-model" class="section level3">
+<h3>glm model</h3>
+<pre class="r"><code>ggplot(neighbors_, aes(y=price, x=area_interior, col=parking))+
+  geom_point(alpha=0.7,size=2)+
+  scale_y_continuous( labels = scales::dollar)+
+  geom_smooth(method=&#39;glm&#39;,method.args=list(family = inverse.gaussian(link=&quot;log&quot;)))+
+  geom_vline(data=ref_home, aes(xintercept=area_interior),col=&#39;black&#39;,lty=2)+
+  coord_cartesian(xlim=c(400,2000),ylim=c(2e5,1e6))+
+  ylab(&#39;Price&#39;)+xlab(&#39;Surface sqft&#39;)</code></pre>
+<p><img src="stats_habr_files/figure-html/neighborhood_glm1-1.svg" /><!-- --></p>
+<pre class="r"><code>fam=inverse.gaussian(link=&quot;log&quot;)
+ilink &lt;- fam$linkinv
+
+model_price_glm &lt;- glm(mprice ~ parking:area_interior , data=neighbors_, family=fam)
+
+print(summary(model_price_glm))</code></pre>
+<pre><code>## 
+## Call:
+## glm(formula = mprice ~ parking:area_interior, family = fam, data = neighbors_)
+## 
+## Deviance Residuals: 
+##        Min          1Q      Median          3Q         Max  
+## -1.158e-03  -2.304e-04  -3.213e-05   1.643e-04   7.957e-04  
+## 
+## Coefficients:
+##                             Estimate Std. Error t value Pr(&gt;|t|)    
+## (Intercept)                1.230e+01  3.984e-02  308.73   &lt;2e-16 ***
+## parkingFALSE:area_interior 7.482e-04  4.486e-05   16.68   &lt;2e-16 ***
+## parkingTRUE:area_interior  8.749e-04  3.836e-05   22.81   &lt;2e-16 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## (Dispersion parameter for inverse.gaussian family taken to be 8.466078e-08)
+## 
+##     Null deviance: 8.4965e-05  on 313  degrees of freedom
+## Residual deviance: 2.6885e-05  on 311  degrees of freedom
+## AIC: 8169
+## 
+## Number of Fisher Scoring iterations: 4</code></pre>
+<pre class="r"><code># predict price
+predict_home&lt;-predict(model_price_glm, ref_home, se.fit=T)
+
+print(&quot;prediction and 95% confidence intervals:&quot;)</code></pre>
+<pre><code>## [1] &quot;prediction and 95% confidence intervals:&quot;</code></pre>
+<pre class="r"><code>print(ilink(predict_home$fit))</code></pre>
+<pre><code>##        1 
+## 436702.2</code></pre>
+<pre class="r"><code>print(c(ilink(predict_home$fit-2*predict_home$se.fit), ilink(predict_home$fit+2*predict_home$se.fit)))</code></pre>
+<pre><code>##        1        1 
+## 421749.4 452185.2</code></pre>
+<pre class="r"><code>neighbors_$pred&lt;- ilink(predict(model_price_glm))
+neighbors_$res &lt;- neighbors_$mprice-neighbors_$pred
+
+ggplot(neighbors_, aes(x=pred, y=res) ) +
+  geom_point(alpha=0.7,size=2)+
+  scale_y_continuous(labels = scales::dollar )+
+  scale_x_continuous(labels = scales::dollar )+
+  ggtitle(&#39;GLM Residuals&#39;)</code></pre>
+<p><img src="stats_habr_files/figure-html/neighborhood_glm2-1.svg" /><!-- --></p>
+</div>
+<div id="price-per-square-foot" class="section level3">
+<h3>price per square foot</h3>
+<pre class="r"><code>ggplot(neighbors_, aes(y=price_sqft,x=parking, col=parking))+
+  geom_point(alpha=0.7,size=2,pos=&#39;jitter&#39;)+
+  geom_boxplot(alpha=0.5,size=0.5)+
+  facet_wrap(~bedrooms,labeller = label_both)+
+  scale_y_continuous( labels = scales::dollar)+
+  ylab(&#39;Price/sqft&#39;)+xlab(&#39;&#39;)</code></pre>
+<p><img src="stats_habr_files/figure-html/neighborhood_sqft_price-1.svg" /><!-- --></p>
+<pre class="r"><code>model_psqft &lt;- glm(price_sqft ~ parking + bedrooms, data=neighbors_, family=fam)
+
+print(summary(model_psqft))</code></pre>
+<pre><code>## 
+## Call:
+## glm(formula = price_sqft ~ parking + bedrooms, family = fam, 
+##     data = neighbors_)
+## 
+## Deviance Residuals: 
+##       Min         1Q     Median         3Q        Max  
+## -0.026625  -0.006673  -0.000958   0.004938   0.031624  
+## 
+## Coefficients:
+##             Estimate Std. Error t value Pr(&gt;|t|)    
+## (Intercept)  6.22330    0.02782 223.695  &lt; 2e-16 ***
+## parkingTRUE  0.11456    0.02400   4.772 2.81e-06 ***
+## bedrooms2   -0.02917    0.02934  -0.994  0.32080    
+## bedrooms3   -0.02281    0.03862  -0.591  0.55521    
+## bedrooms4   -0.18546    0.06694  -2.771  0.00593 ** 
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## (Dispersion parameter for inverse.gaussian family taken to be 8.650397e-05)
+## 
+##     Null deviance: 0.028868  on 313  degrees of freedom
+## Residual deviance: 0.026257  on 309  degrees of freedom
+## AIC: 3830.3
+## 
+## Number of Fisher Scoring iterations: 4</code></pre>
+<pre class="r"><code>print(&quot;Understanding factors&quot;)</code></pre>
+<pre><code>## [1] &quot;Understanding factors&quot;</code></pre>
+<pre class="r"><code>print(ilink(model_psqft$coeff))</code></pre>
+<pre><code>## (Intercept) parkingTRUE   bedrooms2   bedrooms3   bedrooms4 
+## 504.3627105   1.1213758   0.9712496   0.9774513   0.8307217</code></pre>
+<pre class="r"><code># predict price
+predict_home&lt;-predict(model_psqft, ref_home, se.fit=T)
+
+print(&quot;prediction and 95% confidence intervals:&quot;)</code></pre>
+<pre><code>## [1] &quot;prediction and 95% confidence intervals:&quot;</code></pre>
+<pre class="r"><code>print(c(ilink(predict_home$fit-2*predict_home$se.fit), 
+        ilink(predict_home$fit),
+        ilink(predict_home$fit+2*predict_home$se.fit))*ref_home$area_interior)</code></pre>
+<pre><code>##        1        1        1 
+## 413724.7 430666.5 448302.0</code></pre>
+</div>
+<div id="longitudinal-condo-price-model-loess-smoothihg" class="section level3">
+<h3>Longitudinal condo price model: Loess smoothihg</h3>
+<p><img src="stats_habr_files/figure-html/neighborhood_lng_loess1-1.svg" /><!-- --></p>
+<p><img src="stats_habr_files/figure-html/neighborhood_lng_loess2-1.svg" /><!-- --></p>
+</div>
+<div id="longitudinal-condo-price-modelgam-model" class="section level3">
+<h3>Longitudinal condo price model:GAM model</h3>
+<pre><code>## 
+## Family: inverse.gaussian 
+## Link function: log 
+## 
+## Formula:
+## price_sqft ~ bedrooms + parking + s(start_date, k = 24)
+## 
+## Parametric coefficients:
+##             Estimate Std. Error t value Pr(&gt;|t|)    
+## (Intercept)  6.22248    0.02732 227.797  &lt; 2e-16 ***
+## bedrooms2   -0.03438    0.02879  -1.194  0.23335    
+## bedrooms3   -0.03203    0.03797  -0.844  0.39953    
+## bedrooms4   -0.18025    0.06643  -2.713  0.00704 ** 
+## parkingTRUE  0.12210    0.02360   5.173 4.17e-07 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## Approximate significance of smooth terms:
+##                 edf Ref.df     F p-value   
+## s(start_date) 1.971  2.454 5.154 0.00532 **
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## R-sq.(adj) =  0.109   Deviance explained =   13%
+## -REML = 1920.4  Scale est. = 8.3199e-05  n = 314</code></pre>
+<pre><code>## Analysis of Deviance Table
+## 
+## Model 1: price_sqft ~ parking + bedrooms
+## Model 2: price_sqft ~ bedrooms + parking + s(start_date, k = 24)
+##   Resid. Df Resid. Dev     Df  Deviance
+## 1    309.00   0.026257                 
+## 2    307.03   0.025128 1.9712 0.0011288</code></pre>
+<pre><code>## 
+## Family: poisson 
+## Link function: log 
+## 
+## Formula:
+## n ~ s(start_date, k = 24)
+## 
+## Parametric coefficients:
+##             Estimate Std. Error z value Pr(&gt;|z|)    
+## (Intercept)  0.37645    0.05988   6.287 3.23e-10 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## Approximate significance of smooth terms:
+##                 edf Ref.df Chi.sq p-value    
+## s(start_date) 8.955     23  160.6  &lt;2e-16 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## R-sq.(adj) =  0.349   Deviance explained = 47.8%
+## -REML = 304.87  Scale est. = 1         n = 197</code></pre>
+<p><img src="stats_habr_files/figure-html/neighborhood_lng_gam2-1.svg" /><!-- --></p>
+</div>
+<div id="longitudinal-condo-price-model-prediction" class="section level3">
+<h3>Longitudinal condo price model: prediction</h3>
+<pre><code>## [1] &quot;prediction and 95% confidence intervals:&quot;</code></pre>
+<pre><code>##        1        1        1 
+## 527.7101 549.3195 571.8138</code></pre>
+</div>
+<div id="longitudinal-condo-price-model-relative-price-change" class="section level3">
+<h3>Longitudinal condo price model: relative price change</h3>
+</div>
+</div>
+<div id="condo-price-sqft-relative-to-start" class="section level2">
+<h2>Condo price (sqft) relative to start</h2>
+<p><img src="stats_habr_files/figure-html/neighborhood_lng_gam-1.svg" /><!-- --></p>
+<div id="survival-analysis" class="section level3">
+<h3>survival analysis</h3>
+<pre class="r"><code>survdiff(Surv(time_on_market, !active) ~ parking, neighbors)</code></pre>
+<pre><code>## Call:
+## survdiff(formula = Surv(time_on_market, !active) ~ parking, data = neighbors)
+## 
+##                 N Observed Expected (O-E)^2/E (O-E)^2/V
+## parking=FALSE 146      117      105     1.491      2.57
+## parking=TRUE  168      144      156     0.996      2.57
+## 
+##  Chisq= 2.6  on 1 degrees of freedom, p= 0.1</code></pre>
+<pre class="r"><code>surv_type&lt;-survfit(Surv(time_on_market, !active) ~ 1, neighbors_)
+
+p&lt;-ggsurvplot( surv_type, data=neighbors_, conf.int = TRUE,
+    conf.int.style =&#39;step&#39;, censor=F, surv.scale=&#39;percent&#39;,
+    break.time.by=30,surv.median.line=&#39;hv&#39;,
+    xlim=c(0.0,365.0))
+p$plot &lt;- p$plot + theme(legend.text = element_text(size = 5, color = &quot;black&quot;, face = &quot;bold&quot;))
+p</code></pre>
+<p><img src="stats_habr_files/figure-html/neighborhood_surv-1.svg" /><!-- --></p>
+</div>
+</div>
+<div id="plex-price-estimate" class="section level2">
+<h2>Plex price estimate</h2>
+<pre class="r"><code>selected_mls=17758383
+max_distance=2000# 2km
+
+plex_pe&lt;-prop_geo_p %&gt;% filter(type!=&#39;Apartment&#39;, type!=&#39;House&#39;) %&gt;% 
+  mutate(parking=as.factor(parking&gt;0), stories=as.factor(stories),type=as.factor(type))
+
+selected&lt;-plex_pe%&gt;%filter(mls==selected_mls) %&gt;% rename(mls_ref=mls)
+
+# selected
+print(selected%&gt;%as.data.frame()%&gt;%dplyr::select(mls_ref,area_interior,area_land,type,bedrooms,parking,first_ts))</code></pre>
+<pre><code>##    mls_ref area_interior area_land    type bedrooms parking   first_ts
+## 1 17758383       1765.28      1750 Triplex        3    TRUE 2020-02-05</code></pre>
+<pre class="r"><code># create a cicrcle around reference
+search_roi &lt;- st_buffer(selected, max_distance)
+# remove some noise entries
+result &lt;- st_intersection(plex_pe %&gt;% filter(mls!=selected_mls), search_roi) %&gt;% 
+  filter(area_interior&lt;10000, area_interior&gt;100,area_land&gt;0,price&lt;1e7,price&gt;100 ) 
+
+if(file.exists(&quot;osm_result.RDS&quot;)){
+  osm_result&lt;-readRDS(file=&quot;osm_result.RDS&quot;)
+} else {
+  # osm understands information in 4326 projection
+  osm_result &lt;- read_osm(st_bbox(st_transform(search_roi, 4326 )), ext=1.5, type=&quot;esri&quot;)
+  # save to file to speedup runs
+  saveRDS(osm_result, file = &quot;osm_result.RDS&quot;)
+}</code></pre>
+<p><img src="stats_habr_files/figure-html/plex_map-1.svg" /><!-- --></p>
+<pre class="r"><code># 
+ggplot(result%&gt;%as.data.frame(), aes(x=area_interior, y=price, col=type))+
+   geom_point(alpha=0.7)+
+   geom_point(data=selected%&gt;%as.data.frame(), aes(x=area_interior, y=price) , size=10, shape=&#39;+&#39;, alpha=0.9, col=&#39;black&#39;) +
+   scale_y_continuous(labels = scales::dollar )+xlim(c(0,5000))+
+   geom_smooth(method=&#39;glm&#39;,method.args=list(family = inverse.gaussian(link=&quot;log&quot;)))</code></pre>
+<p><img src="stats_habr_files/figure-html/plex_prices2-1.svg" /><!-- --></p>
+<pre class="r"><code>ggplot(result%&gt;%as.data.frame(), aes(y=price_sqft, x=parking, col=parking))+
+  geom_point(alpha=0.7,size=2,pos=&#39;jitter&#39;)+
+  geom_boxplot(alpha=0.5,size=0.5)+
+  facet_grid(type~bedrooms,labeller = label_both)+
+  scale_y_continuous(labels = scales::dollar)+
+  ylab(&#39;Price/sqft&#39;)+xlab(&#39;&#39;)</code></pre>
+<p><img src="stats_habr_files/figure-html/plex_prices2-2.svg" /><!-- --></p>
+<div id="per-sqft-price-regression-model" class="section level3">
+<h3>per sqft price regression model</h3>
+<pre class="r"><code>m_plex &lt;- glm(price_sqft ~ type+bedrooms+parking, data=result%&gt;%as.data.frame(), family=fam)
+print(summary(m_plex))</code></pre>
+<pre><code>## 
+## Call:
+## glm(formula = price_sqft ~ type + bedrooms + parking, family = fam, 
+##     data = result %&gt;% as.data.frame())
+## 
+## Deviance Residuals: 
+##       Min         1Q     Median         3Q        Max  
+## -0.098291  -0.012601  -0.005437   0.003621   0.093939  
+## 
+## Coefficients:
+##                Estimate Std. Error t value Pr(&gt;|t|)    
+## (Intercept)   5.7965411  0.0905453  64.018   &lt;2e-16 ***
+## typeTriplex  -0.1066840  0.0465888  -2.290   0.0226 *  
+## typeFourplex  0.0343763  0.0734954   0.468   0.6402    
+## bedrooms2    -0.0005084  0.0913386  -0.006   0.9956    
+## bedrooms3    -0.0442496  0.0871485  -0.508   0.6119    
+## bedrooms4    -0.0801371  0.1065306  -0.752   0.4524    
+## bedrooms5    -0.1019773  0.1764383  -0.578   0.5636    
+## parkingTRUE   0.1319670  0.0443394   2.976   0.0031 ** 
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## (Dispersion parameter for inverse.gaussian family taken to be 0.00053711)
+## 
+##     Null deviance: 0.14560  on 402  degrees of freedom
+## Residual deviance: 0.13659  on 395  degrees of freedom
+## AIC: 4904.7
+## 
+## Number of Fisher Scoring iterations: 7</code></pre>
+<pre class="r"><code># # predict price
+predict_selected&lt;-predict(m_plex, selected%&gt;%as.data.frame(), se.fit=T)
+
+print(&quot;prediction and 95% confidence intervals:&quot;)</code></pre>
+<pre><code>## [1] &quot;prediction and 95% confidence intervals:&quot;</code></pre>
+<pre class="r"><code>print(ilink(predict_selected$fit))</code></pre>
+<pre><code>##        1 
+## 322.9749</code></pre>
+<pre class="r"><code>print(ilink(predict_selected$se.fit))</code></pre>
+<pre><code>## [1] 1.043278</code></pre>
+<pre class="r"><code>print(c(ilink(predict_selected$fit-2*predict_selected$se.fit),
+        ilink(predict_selected$fit),
+        ilink(predict_selected$fit+2*predict_selected$se.fit))*selected$area_interior)</code></pre>
+<pre><code>##        1        1        1 
+## 523820.3 570140.9 620557.6</code></pre>
+</div>
+</div>
+</div>
+<div id="spatial-prices" class="section level1">
+<h1>Spatial prices</h1>
+<div id="spatial-statistics-rent-of-4-12" class="section level2">
+<h2>Spatial statistics: rent of 4 1/2</h2>
+<div id="simple-median-over-quartier" class="section level3">
+<h3>Simple median over quartier</h3>
+<pre class="r"><code># summarize by neighorhoods and bedrooms
+# only keeping 2 bedroom
+rent_by_quartier&lt;-aggregate(filter(kijiji_geo_p,bedrooms==2)%&gt;%dplyr::select(price),mtl_p,median,join = st_contains) 
+
+# extract borders of districts
+mtl_arr&lt;-mtl_p%&gt;%group_by(nom_arr)%&gt;%summarize()
+
+if(file.exists(&quot;osm_mtl.RDS&quot;)){
+  osm_mtl&lt;-readRDS(file=&quot;osm_mtl.RDS&quot;)
+} else {
+  osm_mtl&lt;-read_osm(st_bbox(mtl_p%&gt;%st_transform(4326)), type=&quot;esri&quot;,ext=1.5) # ext=1.5,
+  # save to file to speedup runs
+  saveRDS(osm_mtl, file = &quot;osm_mtl.RDS&quot;)
+}
+
+
+# whole island
+tm_shape(osm_mtl)+tm_rgb(alpha=0.6)+
+  tm_shape(mtl_arr) + tm_borders(alpha=0.7,col=&#39;black&#39;)+
+  tm_shape(rent_by_quartier) + tm_fill(col=&#39;price&#39;,alpha=0.8,breaks=seq(400,2000,by=200),title=&#39;$&#39;)+
+  tm_shape(ref_home) + tm_symbols(col=&#39;red&#39;,shape=4,size=0.5,alpha=0.8)+
+  tm_legend(position = c(&quot;left&quot;, &quot;top&quot;), 
+            frame = TRUE, outside = FALSE,
+            bg.color=&quot;white&quot;)+
+  tm_compass(position=c(&quot;right&quot;, &quot;bottom&quot;))+
+  tm_scale_bar(position=c(&quot;left&quot;, &quot;bottom&quot;))+
+  tm_layout(scale=1.5)</code></pre>
+<p><img src="stats_habr_files/figure-html/rent_quartier1-1.svg" /><!-- --></p>
+<p><img src="stats_habr_files/figure-html/rent_quartier2-1.svg" /><!-- --></p>
+</div>
+<div id="rental-prices-spatial-model-whole-island" class="section level3">
+<h3>Rental prices spatial model, whole island</h3>
+<pre><code>## 
+## Family: inverse.gaussian 
+## Link function: log 
+## 
+## Formula:
+## price ~ bedrooms + s(x, y, k = 100)
+## 
+## Parametric coefficients:
+##              Estimate Std. Error  t value Pr(&gt;|t|)    
+## (Intercept) 6.9242917  0.0021694 3191.743   &lt;2e-16 ***
+## bedrooms1   0.0005471  0.0025870    0.211    0.833    
+## bedrooms2   0.2449609  0.0027388   89.439   &lt;2e-16 ***
+## bedrooms3   0.4586584  0.0034735  132.047   &lt;2e-16 ***
+## bedrooms4   0.6946183  0.0059213  117.308   &lt;2e-16 ***
+## bedrooms5   0.8458260  0.0110996   76.204   &lt;2e-16 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## Approximate significance of smooth terms:
+##          edf Ref.df     F p-value    
+## s(x,y) 98.12  98.98 812.7  &lt;2e-16 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## R-sq.(adj) =  0.547   Deviance explained = 54.6%
+## -REML = 7.5656e+05  Scale est. = 6.9015e-05  n = 104895</code></pre>
+</div>
+<div id="rental-price-map-for-4-12" class="section level3">
+<h3>Rental price map for 4 1/2</h3>
+<p><img src="stats_habr_files/figure-html/rent_spatial2-1.svg" /><!-- --></p>
+</div>
+<div id="rental-prices-spatial-model-central-part" class="section level3">
+<h3>Rental prices spatial model, central part</h3>
+<pre><code>## 
+## Family: inverse.gaussian 
+## Link function: log 
+## 
+## Formula:
+## price ~ bedrooms + s(x, y, k = 100)
+## 
+## Parametric coefficients:
+##             Estimate Std. Error  t value Pr(&gt;|t|)    
+## (Intercept) 6.960093   0.002313 3009.122  &lt; 2e-16 ***
+## bedrooms1   0.022683   0.002777    8.169 3.15e-16 ***
+## bedrooms2   0.281851   0.003004   93.816  &lt; 2e-16 ***
+## bedrooms3   0.494016   0.003988  123.878  &lt; 2e-16 ***
+## bedrooms4   0.726634   0.006484  112.059  &lt; 2e-16 ***
+## bedrooms5   0.843509   0.012560   67.160  &lt; 2e-16 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## Approximate significance of smooth terms:
+##          edf Ref.df     F p-value    
+## s(x,y) 97.68  98.97 600.1  &lt;2e-16 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## R-sq.(adj) =  0.529   Deviance explained = 52.3%
+## -REML = 6.442e+05  Scale est. = 6.8437e-05  n = 88393</code></pre>
+</div>
+<div id="rental-price-map-for-4-12-1" class="section level3">
+<h3>Rental price map for 4 1/2</h3>
+<p><img src="stats_habr_files/figure-html/rent_spatial4-1.svg" /><!-- --></p>
+</div>
+<div id="plex-price-spatial-model" class="section level3">
+<h3>Plex price spatial model</h3>
+<pre><code>## 
+## Family: inverse.gaussian 
+## Link function: log 
+## 
+## Formula:
+## price_sqft ~ type + bedrooms + parking + s(x, y, k = 100)
+## 
+## Parametric coefficients:
+##              Estimate Std. Error t value Pr(&gt;|t|)    
+## (Intercept)   5.71963    0.02517 227.269  &lt; 2e-16 ***
+## typeTriplex  -0.06820    0.01244  -5.485 4.63e-08 ***
+## typeFourplex -0.03992    0.01826  -2.187   0.0289 *  
+## bedrooms2    -0.02285    0.02502  -0.913   0.3611    
+## bedrooms3    -0.04356    0.02483  -1.755   0.0795 .  
+## bedrooms4    -0.04786    0.02965  -1.614   0.1066    
+## bedrooms5     0.06915    0.05271   1.312   0.1897    
+## bedrooms6    -0.06575    0.08221  -0.800   0.4239    
+## parkingTRUE   0.06414    0.01214   5.284 1.39e-07 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## Approximate significance of smooth terms:
+##         edf Ref.df     F p-value    
+## s(x,y) 62.2  78.88 13.13  &lt;2e-16 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## R-sq.(adj) =  0.322   Deviance explained = 37.4%
+## -REML =  12939  Scale est. = 0.0002071  n = 2252</code></pre>
+<pre><code>## 
+## Family: inverse.gaussian 
+## Link function: log 
+## 
+## Formula:
+## area_interior ~ type + bedrooms + parking + s(x, y, k = 100)
+## 
+## Parametric coefficients:
+##              Estimate Std. Error t value Pr(&gt;|t|)    
+## (Intercept)   7.52380    0.03298 228.121  &lt; 2e-16 ***
+## typeTriplex   0.24187    0.01733  13.954  &lt; 2e-16 ***
+## typeFourplex  0.39287    0.02749  14.294  &lt; 2e-16 ***
+## bedrooms2     0.04943    0.03272   1.511  0.13097    
+## bedrooms3     0.17813    0.03280   5.430 6.25e-08 ***
+## bedrooms4     0.23820    0.04056   5.873 4.94e-09 ***
+## bedrooms5     0.53905    0.07990   6.746 1.94e-11 ***
+## bedrooms6     0.40691    0.12476   3.262  0.00112 ** 
+## parkingTRUE  -0.01280    0.01630  -0.785  0.43230    
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## Approximate significance of smooth terms:
+##         edf Ref.df    F  p-value    
+## s(x,y) 65.7  82.16 1.92 2.05e-06 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## R-sq.(adj) =  0.139   Deviance explained = 44.4%
+## -REML =  17426  Scale est. = 4.7884e-05  n = 2252</code></pre>
+</div>
+<div id="price-per-sqft-for-a-triplex-with-3br-and-parking-in-roi" class="section level3">
+<h3>Price per sqft for a triplex with 3br and parking in ROI</h3>
+<p><img src="stats_habr_files/figure-html/plex_price_spatial2-1.svg" /><!-- --></p>
+</div>
+<div id="area-for-a-triplex-with-3br-and-parking-in-roi" class="section level3">
+<h3>area for a triplex with 3br and parking in ROI</h3>
+<p><img src="stats_habr_files/figure-html/plex_area_spatial3-1.svg" /><!-- --></p>
+</div>
+<div id="triplex-profitability-rent-per-yeartriplex-total-price" class="section level3">
+<h3>Triplex Profitability (rent per year/triplex total price)</h3>
+<p><img src="stats_habr_files/figure-html/plex_profitability_spatial-1.svg" /><!-- --></p>
+</div>
+</div>
+</div>
+<div id="plexes-longitudinal-price-model-ahuntsic-rosemont-villeray" class="section level1">
+<h1>Plexes Longitudinal price model, Ahuntsic, Rosemont, Villeray</h1>
+<pre><code>## 
+## Family: inverse.gaussian 
+## Link function: log 
+## 
+## Formula:
+## price_sqft ~ type + arr + parking + s(start_date, by = type, 
+##     k = 6) + s(start_date, by = arr, k = 6)
+## 
+## Parametric coefficients:
+##              Estimate Std. Error t value Pr(&gt;|t|)    
+## (Intercept)   6.17259    0.01175 525.224  &lt; 2e-16 ***
+## typeDuplex   -0.18065    0.01704 -10.602  &lt; 2e-16 ***
+## typeTriplex  -0.22729    0.01787 -12.722  &lt; 2e-16 ***
+## typeFourplex -0.19927    0.02389  -8.340  &lt; 2e-16 ***
+## arrVilleray  -0.29194    0.01839 -15.878  &lt; 2e-16 ***
+## arrRosemont  -0.14782    0.01701  -8.691  &lt; 2e-16 ***
+## arrAhuntsic  -0.32195    0.01866 -17.252  &lt; 2e-16 ***
+## parkingTRUE   0.05441    0.01164   4.675 3.04e-06 ***
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## Approximate significance of smooth terms:
+##                               edf Ref.df     F p-value  
+## s(start_date):typeApartment 1.004  1.007 0.842  0.3592  
+## s(start_date):typeDuplex    2.090  2.566 0.954  0.3281  
+## s(start_date):typeTriplex   3.513  4.112 2.338  0.0505 .
+## s(start_date):typeFourplex  2.040  2.516 0.814  0.5513  
+## s(start_date):arrPlateau    1.104  1.593 1.273  0.4057  
+## s(start_date):arrVilleray   2.682  3.236 2.810  0.0360 *
+## s(start_date):arrRosemont   1.828  2.267 0.885  0.4134  
+## s(start_date):arrAhuntsic   1.029  1.054 2.254  0.1346  
+## ---
+## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
+## 
+## Rank: 47/48
+## R-sq.(adj) =   0.28   Deviance explained = 29.4%
+## -REML =  24666  Scale est. = 0.00031759  n = 3996</code></pre>
+<p><img src="stats_habr_files/figure-html/plex_longitudinal3-1.svg" /><!-- --></p>
+</div>
+
+
+
+
+</div>
+
+<script>
+
+// add bootstrap table styles to pandoc tables
+function bootstrapStylePandocTables() {
+  $('tr.header').parent('thead').parent('table').addClass('table table-condensed');
+}
+$(document).ready(function () {
+  bootstrapStylePandocTables();
+});
+
+
+</script>
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>
