@@ -12,6 +12,6 @@
 
 ## Data files
 these files can be downloaded from https://github.com/vfonov/re_mtl/releases/tag/v0.0 
-- uniteevaluationfonciere.geojson.xz - downloaded from http://donnees.ville.montreal.qc.ca/dataset/unites-evaluation-fonciere/resource/866a3dbc-8b59-48ff-866d-f2f9d3bbee9d
-- property.sqlite3.xz - archive of the raw property data
-- preprocessed.RData - preprocessed data, generated from property.sqlite3 by `preprocess_data.R` script
+- `uniteevaluationfonciere.geojson.xz` - downloaded from http://donnees.ville.montreal.qc.ca/dataset/unites-evaluation-fonciere/resource/866a3dbc-8b59-48ff-866d-f2f9d3bbee9d
+- `property.sqlite3.xz` - archive of the raw property data
+- `preprocessed.RData` - preprocessed data, generated from `property.sqlite3` by `preprocess_data.R` script
