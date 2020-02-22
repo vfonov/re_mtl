@@ -1,0 +1,404 @@
+---
+title: "Montreal real estate stats"
+output:
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: fill
+    self_contained: False
+    dev: svg
+---
+```{r setup,include=FALSE,eval=TRUE, echo=FALSE, message=FALSE,warning=FALSE,cache=FALSE}
+knitr::opts_chunk$set(cache=TRUE, autodep=TRUE)
+#knitr::opts_chunk$set(warning=FALSE, message=FALSE)
+library(flexdashboard)
+library(tidyverse)
+library(sf)
+library(tmap)
+library(tmaptools)
+library(leaflet)
+library(raster)
+library(mgcv)
+# for survival analysis
+library(survival)
+library(survminer)
+
+# working with time
+library(lubridate)
+theme_set(theme_bw(base_size = 10, base_family = "Arial")+
+  theme(
+        axis.text   = element_text(vjust = 0.2, size = 10),
+        axis.title = element_text(face = 'bold', vjust = 0.2, size = 10),
+        plot.title = element_text(face = 'bold', vjust = 2.0, size = 12),
+        strip.text = element_text(face = 'bold', size = 10),
+        plot.margin = unit(c(1.0,0.2,0.2,0.2), "cm"),
+        legend.position='bottom'
+    ))
+
+```
+```{r load_data,eval=TRUE, echo=FALSE, message=FALSE,warning=FALSE,cache=TRUE}
+load('preprocessed.RData')
+
+```
+```{r prepare,eval=TRUE, echo=FALSE, message=FALSE,warning=FALSE}
+mtl_arr<-mtl_pa
+
+kijiji_roi<-kijiji_geo_p%>%dplyr::filter(!is.na(bedrooms))%>%st_join(mtl_land,left=F)
+
+rent<-kijiji_roi %>% mutate(bedrooms=as.factor(bedrooms))
+rent_<-bind_cols( as.data.frame(rent), as.data.frame(st_coordinates(rent)))%>%rename(x=X,y=Y)
+
+# filter out empty regions
+rent_n<-rent_%>%group_by(nom_qr)%>%summarize(n=n())%>%filter(n>50)
+
+mask_rent<-mtl_p%>%inner_join(rent_n,by=c('nom_qr'))%>%st_intersection(mtl_land)
+
+prop_geo_p <- prop_geo_p %>%
+  dplyr::filter( type != 'House', mprice>0, area_interior>300 , !is.na(bedrooms) ) %>%
+  mutate(bedrooms=droplevels(bedrooms), type=droplevels(type),
+         parking=factor(parking>0,levels=c(F,T),labels=c('No parking','With parking')),
+         nom_arr=as.factor(nom_arr), nom_qr=as.factor(nom_qr)) %>%
+  st_intersection(mtl_land) 
+
+prop_geo_p_lim<-prop_geo_p %>% as.data.frame() %>% group_by(nom_qr,type)%>%
+  summarize(
+    price_low = quantile(mprice,0.01), price_high = quantile(mprice,0.99),
+    area_low = quantile(area_interior,0.01), area_high = quantile(area_interior,0.99),
+  ) %>% dplyr::select(nom_qr,type,price_low,price_high,area_low,area_high)
+
+
+prop_geo_p<- prop_geo_p %>% left_join(prop_geo_p_lim, by=c('nom_qr','type')) %>%
+  filter(mprice<=price_high, mprice>=price_low,
+         area_interior<=area_high,area_interior>=area_low) %>% 
+  dplyr::select(-price_high,-price_low,-area_high,-area_low) 
+
+prop_geo_pp<-bind_cols( as.data.frame(prop_geo_p), as.data.frame(st_coordinates(prop_geo_p)))%>%rename(x=X,y=Y)
+
+condo_geo_pp<-prop_geo_pp%>%filter(type=='Apartment')
+plex_geo_pp<-prop_geo_pp%>%filter(type!='Apartment')
+
+condo_geo_ppn<-condo_geo_pp%>%group_by(nom_qr)%>%summarize(n=n())%>%filter(n>5)%>%as.data.frame()
+plex_geo_ppn<-plex_geo_pp%>%group_by(nom_qr)%>%summarize(n=n())%>%filter(n>5)%>%as.data.frame()
+
+mask_condo<-mtl_p%>%inner_join(condo_geo_ppn,by=c('nom_qr'))%>%st_intersection(mtl_land)
+mask_plex<-mtl_p%>%inner_join(plex_geo_ppn, by=c('nom_qr'))%>%st_intersection(mtl_land)
+
+subway_p<-subway_p%>%mutate(route_name=droplevels(route_name))
+```
+Using [generalized additive models](https://en.wikipedia.org/wiki/Generalized_additive_model) 
+to visualize prices on the Montreal Island. Based on data from kijiji and centris. Gray areas 
+mean that not enough reliable information was available.
+
+# Rent 4 1/2
+
+## {data-height=100}
+
+### Time period
+
+```{r rent_ts}
+valueBox(paste(min(rent_$first_ts),max(rent_$first_ts)))
+```
+
+
+### N
+
+```{r rent_N}
+valueBox(length(rent$ts))
+```
+
+## {data-height=900}
+
+### {data-width=700}
+
+```{r rent_map,eval=TRUE, echo=FALSE, message=FALSE,warning=FALSE}
+fam=inverse.gaussian(link="log")
+ilink <- fam$linkinv
+
+# create spatical model with smooth price variable
+model_rent_geo<-gam(price~bedrooms + s(x,y,k=200),
+        data=rent_,bs="cr",method='REML',
+        family=fam)
+
+
+pred_rent <- raster(extent(mtl_land),res=100)
+crs(pred_rent)<-crs(mtl_land)
+
+# need to predict response (link by default)
+my_predict<-function(...) predict(...,type="response")
+
+# predict 4 1/2 rents
+pred_rent <- raster::interpolate(pred_rent,model_rent_geo,fun=my_predict, xyOnly=T,
+                                const=data.frame(bedrooms=2))
+pred_rent <- mask(pred_rent, mask_rent)
+
+m<-tm_shape(mtl_arr,bbox=extent(mtl_arr)) + tm_borders(alpha=0.8, col='black')+
+   tm_shape(pred_rent)+tm_raster(style="cont",alpha=0.7, title='$')+
+   tm_shape(subway_stop_p%>%dplyr::select(stop_name))+tm_symbols(col='blue',alpha=0.2,size=0.03)+
+   tm_shape(subway_p)+tm_lines(col='blue',alpha=0.2)+
+   tm_scale_bar(position=c("right", "bottom"))+
+   tm_layout(scale=1)
+
+# convert to interactive leaflet map
+tmap_leaflet(m)
+#m
+```
+
+### {data-width=300}
+```{r rent_hist}
+ggplot(rent,aes(x=bedrooms,y=price))+geom_violin()+
+  scale_y_continuous(labels = scales::dollar)+
+  ylab('rent/month')+xlab('bedrooms')
+```
+
+
+# Condo 4 1/2 price/sqft
+
+## {data-height=100}
+
+### Time period
+
+```{r condo_ts}
+valueBox(paste(min(condo_geo_pp$first_ts),max(condo_geo_pp$first_ts)))
+```
+
+
+### N
+
+```{r condo_N}
+valueBox(length(condo_geo_pp$first_ts))
+```
+
+## {data-height=900}
+
+### {data-width=700}
+
+```{r condo_map}
+model_psqf_geo<-gam(price_sqft ~ bedrooms + s(x,y, k=100),
+        data=condo_geo_pp, bs="cr",method='REML',
+        family=fam)
+
+
+pred_price <- raster(extent(mtl_land),res=100)
+crs(pred_price)<-crs(mtl_land)
+
+# predict 4 1/2 cost
+pred_price <- raster::interpolate(pred_price,model_psqf_geo,fun=my_predict, xyOnly=T,
+                                  const=data.frame(bedrooms=2))
+pred_price <- mask(pred_price, mask_condo)
+
+m<-tm_shape(mtl_arr,bbox=extent(mtl_arr)) + tm_borders(alpha=0.8, col='black')+
+   tm_shape(pred_price)+tm_raster(style="cont",alpha=0.7, title='$/sqft')+
+   tm_shape(subway_stop_p%>%dplyr::select(stop_name))+tm_symbols(col='blue',alpha=0.2,size=0.03)+
+   tm_shape(subway_p%>%dplyr::select(route_name))+tm_lines(col='blue',alpha=0.2)+
+   tm_scale_bar(position=c("right", "bottom"))+
+   tm_layout(scale=1)
+
+# convert to interactive leaflet map
+tmap_leaflet(m)
+```
+
+### {data-width=300} 
+
+```{r condo_hist}
+ggplot(condo_geo_pp,aes(x=bedrooms,y=mprice))+geom_violin()+
+  scale_y_continuous(labels = scales::dollar)+
+  ylab('total price')+xlab('bedrooms')
+```
+
+
+# Duplex with 4 1/2 price/sqft 
+
+## {data-height=100}
+
+### Time period
+
+```{r plex_ts}
+valueBox(paste(min(plex_geo_pp$first_ts),max(plex_geo_pp$first_ts)))
+```
+
+
+### N
+
+```{r plex_N}
+valueBox(length(plex_geo_pp$first_ts))
+```
+
+## {data-height=900}
+
+### {data-width=700}
+
+```{r plex_map}
+model_psqf_geo2<-gam(price_sqft ~ type + bedrooms + s(x,y, k=100),
+        data=plex_geo_pp, bs="cr",method='REML',
+        family=fam)
+
+
+pred_price2 <- raster(extent(mtl_land),res=100)
+crs(pred_price2)<-crs(mtl_land)
+
+# predict 4 1/2 prices
+pred_price2 <- raster::interpolate(pred_price2,model_psqf_geo2,fun=my_predict, xyOnly=T,
+                                  const=data.frame(type='Duplex', bedrooms=2 ))
+pred_price2 <- mask(pred_price2, mask_plex)
+
+m<-tm_shape(mtl_arr,bbox=extent(mtl_arr)) + tm_borders(alpha=0.8, col='black')+
+   tm_shape(pred_price2)+tm_raster(style="cont",alpha=0.7, title='$/sqft')+
+   tm_shape(subway_stop_p%>%dplyr::select(stop_name))+tm_symbols(col='blue',alpha=0.2,size=0.03)+
+   tm_shape(subway_p%>%dplyr::select(route_name))+tm_lines(col='blue',alpha=0.2)+
+   tm_scale_bar(position=c("right", "bottom"))+
+   tm_layout(scale=1)
+
+# convert to interactive leaflet map
+tmap_leaflet(m)
+```
+
+### {data-width=300} 
+
+```{r plex_hist}
+ggplot(plex_geo_pp,aes(x=bedrooms,y=mprice))+geom_violin()+
+  scale_y_continuous(labels = scales::dollar)+
+  facet_grid(type~.)+
+  ylab('total price')+xlab('bedrooms')
+```
+
+# Time course for the whole island
+
+##
+
+###
+
+```{r mtl_timecourse}
+start_ts=min(prop_geo_pp$first_ts)
+end_ts=max(prop_geo_pp$first_ts)
+
+model_psqft_mtl_t <- gam(price_sqft ~ type +
+  s(start_date, by=type, k=6),
+          data=prop_geo_pp, bs="cr",
+          family=fam, method='REML')
+
+
+simul_mtl<-expand.grid(type=levels(prop_geo_pp$type),
+                   first_ts=seq(start_ts,end_ts,by='day')) %>%
+  mutate(start_date=as.numeric(first_ts))
+
+# predict price
+ppp<-predict(model_psqft_mtl_t, newdata=simul_mtl, se.fit=T)
+simul_mtl$price_sqft<-ilink(ppp$fit)
+simul_mtl$price_sqft_upr<-ilink(ppp$fit+2*ppp$se.fit)
+simul_mtl$price_sqft_lwr<-ilink(ppp$fit-2*ppp$se.fit)
+
+ggplot( simul_mtl,
+       aes(x=first_ts, y=price_sqft, ymin=price_sqft_lwr, ymax=price_sqft_upr, col=type))+
+  ylab('$/sqft')+xlab('')+
+  scale_y_continuous(labels = scales::dollar)+
+  geom_line()+geom_ribbon(alpha=0.4,lty=2)+
+  scale_x_date(limits=c(start_ts,end_ts))+
+  theme(
+        axis.text.x=element_text(angle=60, hjust=1, size=12)
+    ) 
+
+```
+
+# Time course by borough
+
+## 
+
+### 
+
+```{r borough_timecourse}
+# determine start and end date for each property type for each area
+
+# remove underrepresented ranges
+prop_geo_lim<-prop_geo_pp %>% 
+  group_by(nom_arr, type) %>%
+  summarize( begin_date=min(start_date), 
+               end_date=max(start_date))
+
+model_psqft_arr_t <- gam(price_sqft ~ type + nom_arr +  
+  s(start_date, by=type, k=4) + s(start_date, by=nom_arr, k=4),
+          data=prop_geo_pp, bs="cr",
+          family=fam, method='REML')
+
+#model_psqft_arr_t <- gam(price_sqft ~ type + nom_arr + parking + s(start_date, by=type, k=8) ,
+#          data=prop_geo_pp, bs="cr",
+#          family=fam, method='REML')
+
+#print(summary(model_psqft_arr_t))
+
+# calculate regression values
+simul2<-expand.grid(type=levels(prop_geo_pp$type),
+                   parking=c('With parking'),
+                   bedrooms=c(2),
+                   first_ts=seq(start_ts,end_ts,by='day'),
+                   nom_arr=levels(prop_geo_pp$nom_arr)) %>%
+  mutate(start_date=as.numeric(first_ts))
+
+# define domain 
+simul2 <- inner_join(simul2, prop_geo_lim, by=c('type', 'nom_arr') ) %>% 
+  filter(start_date>=begin_date,start_date<=end_date)%>%
+  mutate(nom_arr=droplevels(nom_arr))
+
+# predict price
+ppp<-predict(model_psqft_arr_t, newdata=simul2, se.fit=T)
+simul2$price_sqft<-ilink(ppp$fit)
+simul2$price_sqft_upr<-ilink(ppp$fit+2*ppp$se.fit)
+simul2$price_sqft_lwr<-ilink(ppp$fit-2*ppp$se.fit)
+
+for(n in levels(simul2$nom_arr)) {
+gg<-ggplot( simul2%>%filter(nom_arr==n),
+       aes(x=first_ts, y=price_sqft, ymin=price_sqft_lwr, ymax=price_sqft_upr, col=type))+
+  ylab('')+xlab('')+
+  geom_line()+geom_ribbon(alpha=0.4,lty=2)+
+  scale_y_continuous(labels = scales::dollar)+
+  scale_x_date(limits=c(start_ts,end_ts))+
+  theme(
+        axis.text.x=element_text(angle=60, hjust=1, size=12)
+    ) + ggtitle(n)
+
+print(gg)
+}
+```
+
+
+# Spatial survival on the market
+
+##
+
+### {data-width=700}
+```{r surv_map}
+mmt<-gam(time_on_market ~ type + s(x,y,k=100,by=type),
+        data=prop_geo_pp, bs="cr",
+        family=cox.ph(), weight=!active)
+
+
+pred_surv <- raster(extent(mtl_land),res=100)
+crs(pred_surv)<-crs(mtl_land)
+
+# predict survival after 90 days
+pred_surv<-raster::interpolate(pred_surv, mmt, fun=my_predict, xyOnly=T,
+  const=data.frame(type='Apartment', time_on_market=90 ))
+
+pred_surv <- mask(pred_surv, mask_condo)
+
+m<-tm_shape(mtl_arr,bbox=extent(mtl_arr)) + tm_borders(alpha=0.8, col='black')+
+   tm_shape(pred_surv)+tm_raster(style="cont",alpha=0.7, title='p after 90 days')+
+   tm_shape(subway_stop_p%>%dplyr::select(stop_name))+tm_symbols(col='blue',alpha=0.2,size=0.03)+
+   tm_shape(subway_p%>%dplyr::select(route_name))+tm_lines(col='blue',alpha=0.2)+
+   tm_scale_bar(position=c("right", "bottom"))+
+   tm_layout(scale=1)
+
+# convert to interactive leaflet map
+tmap_leaflet(m)
+```
+
+### {data-width=300}
+```{r surv_graph}
+surv_type<-survfit(Surv(time_on_market, !active) ~ type, prop_geo_pp)
+
+p<-ggsurvplot( surv_type, data=prop_geo_pp, conf.int = TRUE,
+    conf.int.style ='step', censor=F, surv.scale='percent',
+    break.time.by=30,surv.median.line='hv',
+    legend.labs = levels(prop_geo_pp$type),
+    xlim=c(0.0,365.0))
+p$plot <- p$plot + theme(legend.text = element_text(size = 5, color = "black", face = "bold"))
+p
+```

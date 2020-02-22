@@ -1,0 +1,796 @@
+---
+title: "Montreal real estate statistics, HABR version"
+output:
+  html_document:
+    toc: true
+    theme: united
+    self_contained: false
+    dev: svg
+---
+```{r global_options,include=FALSE,echo=FALSE}
+library(knitr)
+
+#http://zevross.com/blog/2017/06/19/tips-and-tricks-for-working-with-images-and-figures-in-r-markdown-documents/
+#knit_hooks$set(optipng = hook_optipng)
+#knit_hooks$set(pngquant = hook_pngquant)
+knitr::opts_chunk$set(warning=FALSE, message=FALSE)
+knitr::opts_chunk$set(dpi=96, fig.retina=1) # , pngquant='--speed=1', optipng = '-o7'
+
+```
+```{r setup, eval=TRUE, echo=FALSE, message=FALSE,warning=FALSE}
+library(tidyverse)
+library(jsonlite)
+library(sf)
+
+library(geojsonsf)
+library(tmap)
+library(tmaptools)
+
+# GAM modelling
+library(mgcv)
+library(raster)
+library(osmdata)
+
+
+# for survival analysis
+library(survival)
+library(survminer)
+# physical units (disance)
+library(units)
+# working with time
+library(lubridate)
+
+# additional statistical methods
+library(MASS)
+
+theme_set(theme_bw(base_size = 14, base_family = "Arial")+
+  theme(
+        axis.text   = element_text(vjust = 0.2, size = 12),
+        axis.title = element_text(face = 'bold', vjust = 0.2, size = 20),
+        plot.title = element_text(face = 'bold', vjust = 2.0, size = 20),
+        strip.text = element_text(face = 'bold', size = 12),
+        plot.margin = unit(c(1.0,0.2,0.2,0.2), "cm"),
+        legend.position='bottom'
+    ))
+
+load('preprocessed.RData')
+# 6666 St. Urban
+ref_work<-data.frame(latitude=45.530657, 
+                     longitude=-73.613654)%>%
+  st_as_sf(coords=c('longitude','latitude'),crs=4326) %>% 
+  st_transform(crs=32188, check=T, partial=F)  
+```
+
+
+# Condo price
+
+## Neighborhood map
+```{r neighborhood, eval=TRUE, echo=TRUE, message=FALSE, fig.height=7, fig.width=10, error=F}
+plateau<-mtl_p%>%filter(nom_arr=='Le Plateau-Mont-Royal')%>%st_buffer(dist=0)
+
+# near the border between two
+neighbourhood<-mtl_p%>%filter(nom_qr %in% c("Saint-Louis", "Milton-Parc"))%>%summarize()
+
+
+if(file.exists("osm_neighbourhood.RDS")){
+  osm_neighbourhood<-readRDS(file="osm_neighbourhood.RDS")
+} else {
+  # osm understands information in 4326 projection
+  osm_neighbourhood<-read_osm(st_bbox(neighbourhood%>%st_transform(4326)), type="esri") # ext=1.5,
+  # save to file to speedup runs
+  saveRDS(osm_neighbourhood, file = "osm_neighbourhood.RDS")
+}
+
+# my region of interest
+ROI_p<-mtl_p %>% filter( nom_arr %in% 
+  c('Le Plateau-Mont-Royal',
+    'Villeray–Saint-Michel–Parc-Extension',
+    'Rosemont–La Petite-Patrie',
+    "Ahuntsic-Cartierville",
+    "Outremont",
+    "Ville-Marie",
+    "Le Sud-Ouest",
+    "Côte-des-Neiges–Notre-Dame-de-Grâce","Verdun","Westmount","Hampstead","Côte-Saint-Luc","Saint-Laurent","Mont-Royal"
+    ) ) %>% st_intersection(st_geometry(mtl_land)%>%st_buffer(0)) %>%
+   mutate( arr=factor(nom_arr, 
+    levels=c('Le Plateau-Mont-Royal',
+    'Villeray–Saint-Michel–Parc-Extension',
+    'Rosemont–La Petite-Patrie',
+    "Ahuntsic-Cartierville","Outremont", "Ville-Marie","Le Sud-Ouest",
+    "Côte-des-Neiges–Notre-Dame-de-Grâce","Verdun","Westmount","Hampstead","Côte-Saint-Luc","Saint-Laurent","Mont-Royal"),
+    labels=c('Plateau','Villeray','Rosemont','Ahuntsic',"Outremont",
+    "Ville-Marie","Sud-Ouest","CdN-NdG","Verdun","Westmount","Hampstead","Côte-Saint-Luc","Saint-Laurent","TMR"
+    )),
+     qr=as.factor(nom_qr))
+#
+if(file.exists("osm_roi.RDS")){
+  osm_roi<-readRDS(file="osm_roi.RDS")
+} else {
+  osm_roi<-read_osm(st_bbox(ROI_p%>%st_transform(4326)), type="esri") # ext=1.5,
+  # save to file to speedup runs
+  saveRDS(osm_roi, file = "osm_roi.RDS")
+}
+
+# create subset of data
+neighbors<-prop_geo_p %>% 
+  filter(type=='Apartment', mprice>0, bedrooms %in% c(1,2,3,4), area_interior<10000, area_interior>0) %>% 
+  st_join(neighbourhood, left=F) %>% 
+  mutate(bedrooms=droplevels(bedrooms), parking=as.factor(parking>0))
+
+tm_shape(osm_neighbourhood) + tm_rgb(alpha=0.7)+
+  tm_shape(neighbourhood) + tm_borders(col='red',alpha=0.8)  + 
+  tm_shape(neighbors) + tm_symbols(shape=3,size=0.2,alpha=0.8) +
+  tm_shape(ref_home) + tm_symbols(col='red',shape=4,size=0.5,alpha=0.8)+
+  tm_compass(position=c("right", "bottom"))+
+  tm_scale_bar(position=c("left", "bottom"))+
+  tm_layout(scale=1.5)
+```
+
+
+## neighbourhood prices, 
+
+### simple linear model
+```{r neighborhood_lm1, eval=TRUE, echo=TRUE, message=FALSE, fig.height=7, fig.width=10, error=F}
+# convert spatial object into a simple data frame with x and y 
+neighbors_<-bind_cols(as.data.frame(neighbors),as.data.frame(st_coordinates(neighbors)))%>%rename(x=X,y=Y) 
+  
+ggplot(neighbors_, aes(y=price, x=area_interior, col=parking))+
+  geom_point(alpha=0.7,size=2)+
+  scale_y_continuous( labels = scales::dollar)+
+  geom_smooth(method='lm')+
+  geom_vline(data=ref_home, aes(xintercept=area_interior),col='black',lty=2)+
+  coord_cartesian(xlim=c(400,2000),ylim=c(2e5,1e6))+
+  ylab('Price')+xlab('Surface sqft')
+
+```
+
+```{r neighborhood_lm2 }
+# simple regression model
+model_price_lm <- lm(mprice ~ parking:area_interior , data=neighbors_)
+
+print(summary(model_price_lm))
+# predict price
+print(predict(model_price_lm, ref_home, se.fit=T))
+```
+
+```{r neighborhood_lm_resid, eval=TRUE, echo=TRUE, message=FALSE, fig.height=7, fig.width=10, error=F}
+neighbors_$pred<- predict(model_price_lm)
+neighbors_$res <- neighbors_$mprice-neighbors_$pred
+
+ggplot(neighbors_, aes(x=pred, y=res) ) +
+  geom_point(alpha=0.7,size=2)+
+  scale_y_continuous(labels = scales::dollar )+
+  scale_x_continuous(labels = scales::dollar )+
+  xlab('predicted')+ylab('residuals')
+  
+
+```
+
+### glm model
+```{r neighborhood_glm1, eval=TRUE, echo=TRUE, message=FALSE, fig.height=7, fig.width=10, error=F}
+
+ggplot(neighbors_, aes(y=price, x=area_interior, col=parking))+
+  geom_point(alpha=0.7,size=2)+
+  scale_y_continuous( labels = scales::dollar)+
+  geom_smooth(method='glm',method.args=list(family = inverse.gaussian(link="log")))+
+  geom_vline(data=ref_home, aes(xintercept=area_interior),col='black',lty=2)+
+  coord_cartesian(xlim=c(400,2000),ylim=c(2e5,1e6))+
+  ylab('Price')+xlab('Surface sqft')
+```
+
+
+```{r neighborhood_glm2, fig.height=7, fig.width=10}
+fam=inverse.gaussian(link="log")
+ilink <- fam$linkinv
+
+model_price_glm <- glm(mprice ~ parking:area_interior , data=neighbors_, family=fam)
+
+print(summary(model_price_glm))
+# predict price
+predict_home<-predict(model_price_glm, ref_home, se.fit=T)
+
+print("prediction and 95% confidence intervals:")
+print(ilink(predict_home$fit))
+print(c(ilink(predict_home$fit-2*predict_home$se.fit), ilink(predict_home$fit+2*predict_home$se.fit)))
+
+neighbors_$pred<- ilink(predict(model_price_glm))
+neighbors_$res <- neighbors_$mprice-neighbors_$pred
+
+ggplot(neighbors_, aes(x=pred, y=res) ) +
+  geom_point(alpha=0.7,size=2)+
+  scale_y_continuous(labels = scales::dollar )+
+  scale_x_continuous(labels = scales::dollar )+
+  ggtitle('GLM Residuals')
+
+```
+
+### price per square foot
+```{r neighborhood_sqft_price, eval=TRUE, echo=TRUE, message=FALSE, fig.height=7, fig.width=10, error=F}
+
+ggplot(neighbors_, aes(y=price_sqft,x=parking, col=parking))+
+  geom_point(alpha=0.7,size=2,pos='jitter')+
+  geom_boxplot(alpha=0.5,size=0.5)+
+  facet_wrap(~bedrooms,labeller = label_both)+
+  scale_y_continuous( labels = scales::dollar)+
+  ylab('Price/sqft')+xlab('')
+
+model_psqft <- glm(price_sqft ~ parking + bedrooms, data=neighbors_, family=fam)
+
+print(summary(model_psqft))
+print("Understanding factors")
+print(ilink(model_psqft$coeff))
+
+# predict price
+predict_home<-predict(model_psqft, ref_home, se.fit=T)
+
+print("prediction and 95% confidence intervals:")
+print(c(ilink(predict_home$fit-2*predict_home$se.fit), 
+        ilink(predict_home$fit),
+        ilink(predict_home$fit+2*predict_home$se.fit))*ref_home$area_interior)
+```
+
+### Longitudinal condo price model: Loess smoothihg
+```{r neighborhood_lng_loess1, eval=TRUE, echo=FALSE, message=FALSE}
+ggplot(neighbors_ %>% filter(bedrooms %in% c(1,2,3) ),aes(x=first_ts, y=price_sqft))+
+  geom_point()+
+  geom_smooth(method='loess')+
+  ylab('Price/sqft')+
+  xlab('Date')+
+  theme(axis.text.x=element_text(angle=60, hjust=1, size=12) )
+```
+
+
+```{r neighborhood_lng_loess2, eval=TRUE, echo=FALSE, message=FALSE}
+ggplot(neighbors_%>% filter(bedrooms %in% c(1,2,3)),aes(x=first_ts, colour=parking, y=price_sqft))+
+  facet_grid(~bedrooms,labeller = label_context)+
+  geom_point()+
+  geom_smooth(method='loess')+
+  ylab('Price/sqft')+
+  xlab('Date')+
+  theme(axis.text.x=element_text(angle=60, hjust=1, size=12) )
+```
+
+### Longitudinal condo price model:GAM model
+```{r neighborhood_lng_gam1, eval=TRUE, echo=FALSE, message=FALSE}
+
+neighbors_n<-neighbors_ %>% 
+  group_by(start_date) %>% 
+  summarize(n=n())
+
+fam2 <-poisson(link="log")
+ilink2 <- fam2$linkinv
+
+# price model with time
+# k=20, but k=100 produces almost exactly the same result
+model_psqft_t <- gam(price_sqft ~ bedrooms + parking + s(start_date, k=24) ,
+          data=neighbors_, bs="cr",method='REML',
+          family=fam)
+
+# number of units model with time
+model_n_t <- gam(n ~  s(start_date, k=24) ,
+          data=neighbors_n, bs="cr",method='REML',
+          family=fam2,select=T)
+
+print(summary(model_psqft_t))
+print(anova(model_psqft,model_psqft_t))
+print(summary(model_n_t))
+
+# showing fit
+simul<-expand.grid(bedrooms=c(2), 
+                   parking=c(T),
+                   first_ts=seq(min(neighbors_$first_ts), max(neighbors_$first_ts),by='day'))%>%
+  mutate(start_date=as.numeric(first_ts))
+
+ppp<-predict(model_psqft_t, newdata=simul, se.fit=T)
+simul$price_sqft<-ilink(ppp$fit)
+simul$price_sqft_upr<-ilink(ppp$fit+2*ppp$se.fit)
+simul$price_sqft_lwr<-ilink(ppp$fit-2*ppp$se.fit)
+
+ppp<-predict(model_n_t, newdata=simul,se.fit=T)
+simul$n<-ilink2(ppp$fit)
+simul$n_upr<-ilink2(ppp$fit+2*ppp$se.fit)
+simul$n_lwr<-ilink2(ppp$fit-2*ppp$se.fit)
+```
+
+```{r neighborhood_lng_gam2, eval=TRUE, echo=FALSE, message=FALSE, fig.height=7, fig.width=10, error=F}
+ggplot(simul,aes(x=first_ts, colour=parking, y=price_sqft))+
+  geom_ribbon(alpha=0.1,lty=2,aes(ymin=price_sqft_lwr, ymax=price_sqft_upr))+
+  geom_line()+
+  geom_point(data=neighbors_%>% filter(bedrooms %in% c(1,2,3)), aes(x=first_ts,colour=parking, y=price_sqft, shape=bedrooms))+
+  ylab('Price/sqft')+
+  xlab('Date')+
+  theme(
+        axis.text.x=element_text(angle=60, hjust=1, size=12)
+    )
+```
+
+### Longitudinal condo price model: prediction
+```{r neighborhood_lng_gam_pred, eval=TRUE, echo=FALSE, message=FALSE}
+# predict for the latest time
+ref_home$first_ts<-max(neighbors_$first_ts)
+ref_home$start_date<-as.numeric(ref_home$first_ts)
+predict_home_t<-predict(model_psqft_t, ref_home, se.fit=T)
+
+print("prediction and 95% confidence intervals:")
+print(c(ilink(predict_home$fit-2*predict_home$se.fit), ilink(predict_home$fit), ilink(predict_home$fit+2*predict_home$se.fit)))
+```
+
+### Longitudinal condo price model: relative price change
+```{r neighborhood_lng_gam_relative, eval=TRUE, echo=FALSE, message=FALSE}
+# relative to the 1st time point
+ref_simul<-simul %>%
+  filter(first_ts==min(neighbors_$first_ts))%>%
+  rename(ref_price_sqft=price_sqft, ref_n=n, 
+         ref_price_sqft_upr=price_sqft_upr, 
+         ref_price_sqft_lwr=price_sqft_lwr,
+         ref_n_upr=n_upr, 
+         ref_n_lwr=n_lwr
+         ) %>% 
+  dplyr::select(-first_ts)
+
+simul_<-simul %>% left_join(ref_simul, by=c('parking', 'bedrooms'))%>%
+  mutate(rprice_sqft=price_sqft/ref_price_sqft, 
+         rprice_sqft_upr=price_sqft_upr/ref_price_sqft, 
+         rprice_sqft_lwr=price_sqft_lwr/ref_price_sqft, 
+         rn=n/ref_n,
+         rn_lwr=n_lwr/ref_n,
+         rn_upr=n_upr/ref_n)
+```
+
+## Condo price (sqft) relative to start
+```{r neighborhood_lng_gam, eval=TRUE, echo=FALSE, message=FALSE, fig.height=7, fig.width=10, error=F}
+#  
+ggplot(simul_,aes(x=first_ts, y=rprice_sqft, ymin=rprice_sqft_lwr,ymax=rprice_sqft_upr))+
+ geom_ribbon(alpha=0.1,lty=2,aes(col='rel price/sqft'))+
+ geom_line(aes(col='rel price/sqft'))+
+ geom_line(aes(col='rel number',x=first_ts,y=rn))+
+ geom_ribbon(alpha=0.1,lty=2,aes(col='rel number',x=first_ts,ymin=rn_lwr,ymax=rn_upr))+
+  ylab('')+xlab('Date')+
+  theme(axis.text.x=element_text(angle=60, hjust=1, size=12),
+        legend.title = element_blank() )
+```
+
+
+### survival analysis
+```{r neighborhood_surv, eval=TRUE, echo=TRUE, fig.height=7, fig.width=10}
+survdiff(Surv(time_on_market, !active) ~ parking, neighbors)
+
+surv_type<-survfit(Surv(time_on_market, !active) ~ 1, neighbors_)
+
+p<-ggsurvplot( surv_type, data=neighbors_, conf.int = TRUE,
+    conf.int.style ='step', censor=F, surv.scale='percent',
+    break.time.by=30,surv.median.line='hv',
+    xlim=c(0.0,365.0))
+p$plot <- p$plot + theme(legend.text = element_text(size = 5, color = "black", face = "bold"))
+p
+```
+
+
+## Plex price estimate
+```{r plex_prices1 }
+selected_mls=17758383
+max_distance=2000 # 2km
+
+plex_pe<-prop_geo_p %>% filter(type!='Apartment', type!='House') %>% 
+  mutate(parking=as.factor(parking>0), stories=as.factor(stories),type=as.factor(type))
+
+selected<-plex_pe%>%filter(mls==selected_mls) %>% rename(mls_ref=mls)
+
+# selected
+print(selected%>%as.data.frame()%>%dplyr::select(mls_ref,area_interior,area_land,type,bedrooms,parking,first_ts))
+
+# create a cicrcle around reference
+search_roi <- st_buffer(selected, max_distance)
+# remove some noise entries
+result <- st_intersection(plex_pe %>% filter(mls!=selected_mls), search_roi) %>% 
+  filter(area_interior<10000, area_interior>100,area_land>0,price<1e7,price>100 ) 
+
+if(file.exists("osm_result.RDS")){
+  osm_result<-readRDS(file="osm_result.RDS")
+} else {
+  # osm understands information in 4326 projection
+  osm_result <- read_osm(st_bbox(st_transform(search_roi, 4326 )), ext=1.5, type="esri")
+  # save to file to speedup runs
+  saveRDS(osm_result, file = "osm_result.RDS")
+}
+```
+
+```{r plex_map, eval=TRUE, echo=FALSE, fig.height=7, fig.width=10}
+tm_shape(osm_result)+tm_rgb(alpha=0.8)+
+  tm_shape(selected)+tm_symbols(shape=4,col="red",size=2,alpha=0.9)+
+  tm_shape(result)+tm_symbols(shape=3,col="black",alpha=0.7)+
+  tm_shape(search_roi)+tm_borders(col="black",lwd=2,alpha=0.3)+
+  tm_compass(position=c("right", "bottom"))+
+  tm_scale_bar(position=c("left", "bottom"))+
+  tm_layout(scale=1.5)
+```
+
+```{r plex_prices2, fig.height=7, fig.width=10}
+# 
+ggplot(result%>%as.data.frame(), aes(x=area_interior, y=price, col=type))+
+   geom_point(alpha=0.7)+
+   geom_point(data=selected%>%as.data.frame(), aes(x=area_interior, y=price) , size=10, shape='+', alpha=0.9, col='black') +
+   scale_y_continuous(labels = scales::dollar )+xlim(c(0,5000))+
+   geom_smooth(method='glm',method.args=list(family = inverse.gaussian(link="log")))
+
+
+ggplot(result%>%as.data.frame(), aes(y=price_sqft, x=parking, col=parking))+
+  geom_point(alpha=0.7,size=2,pos='jitter')+
+  geom_boxplot(alpha=0.5,size=0.5)+
+  facet_grid(type~bedrooms,labeller = label_both)+
+  scale_y_continuous(labels = scales::dollar)+
+  ylab('Price/sqft')+xlab('')
+```
+
+### per sqft price regression model
+```{r plex_sqft}
+m_plex <- glm(price_sqft ~ type+bedrooms+parking, data=result%>%as.data.frame(), family=fam)
+print(summary(m_plex))
+
+# # predict price
+predict_selected<-predict(m_plex, selected%>%as.data.frame(), se.fit=T)
+
+print("prediction and 95% confidence intervals:")
+print(ilink(predict_selected$fit))
+print(ilink(predict_selected$se.fit))
+
+print(c(ilink(predict_selected$fit-2*predict_selected$se.fit),
+        ilink(predict_selected$fit),
+        ilink(predict_selected$fit+2*predict_selected$se.fit))*selected$area_interior)
+```
+
+
+# Spatial prices
+## Spatial statistics: rent of 4 1/2
+###  Simple median over quartier
+```{r rent_quartier1, eval=TRUE, echo=TRUE, fig.height=7, fig.width=10}
+# summarize by neighorhoods and bedrooms
+# only keeping 2 bedroom
+rent_by_quartier<-aggregate(filter(kijiji_geo_p,bedrooms==2)%>%dplyr::select(price),mtl_p,median,join = st_contains) 
+
+# extract borders of districts
+mtl_arr<-mtl_p%>%group_by(nom_arr)%>%summarize()
+
+if(file.exists("osm_mtl.RDS")){
+  osm_mtl<-readRDS(file="osm_mtl.RDS")
+} else {
+  osm_mtl<-read_osm(st_bbox(mtl_p%>%st_transform(4326)), type="esri",ext=1.5) # ext=1.5,
+  # save to file to speedup runs
+  saveRDS(osm_mtl, file = "osm_mtl.RDS")
+}
+
+
+# whole island
+tm_shape(osm_mtl)+tm_rgb(alpha=0.6)+
+  tm_shape(mtl_arr) + tm_borders(alpha=0.7,col='black')+
+  tm_shape(rent_by_quartier) + tm_fill(col='price',alpha=0.8,breaks=seq(400,2000,by=200),title='$')+
+  tm_shape(ref_home) + tm_symbols(col='red',shape=4,size=0.5,alpha=0.8)+
+  tm_legend(position = c("left", "top"), 
+            frame = TRUE, outside = FALSE,
+            bg.color="white")+
+  tm_compass(position=c("right", "bottom"))+
+  tm_scale_bar(position=c("left", "bottom"))+
+  tm_layout(scale=1.5)
+```
+
+```{r rent_quartier2, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE, fig.height=7, fig.width=10}
+rent_by_quartier_ROI<-aggregate(filter(kijiji_geo_p,bedrooms==2)%>%dplyr::select(price),ROI_p,median,join = st_contains) 
+ROI_p_аrr<-ROI_p%>%group_by(arr)%>%summarize()%>%st_buffer(dist=0)
+# my ROI
+tm_shape(osm_roi) + tm_rgb(alpha=0.7) + 
+  tm_shape(ROI_p_аrr) + tm_borders(alpha=1.0,col='black',lwd=2)+
+  tm_shape(ROI_p_аrr%>%st_centroid()) + tm_text(text='arr',alpha=0.8,size=0.5)+
+  tm_shape(rent_by_quartier_ROI) + tm_fill(col='price',alpha=0.8,breaks=seq(400,2000,by=200),title='$')+
+  tm_shape(ref_home) + tm_symbols(col='red',shape=4,size=1.0,alpha=0.9)+
+  tm_shape(ref_work) + tm_symbols(col='blue',shape=3,size=1.0,alpha=0.9)+
+  tm_legend(position = c("left", "top"), 
+            frame = TRUE, outside = FALSE,
+            bg.color="white")+
+  tm_compass(position=c("right", "bottom"))+
+  tm_scale_bar(position=c("left", "bottom"))+
+  tm_layout(scale=1.5)
+
+```
+
+
+
+### Rental prices spatial model, whole island
+```{r rent_spatial1, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
+
+kijiji_roi<-kijiji_geo_p%>%dplyr::filter(!is.na(bedrooms))%>%st_join(mtl_land,left=F)
+
+rent<-kijiji_roi %>% mutate(bedrooms=as.factor(bedrooms))
+rent_<-bind_cols( as.data.frame(rent), as.data.frame(st_coordinates(rent)))%>%rename(x=X,y=Y)
+
+# create spatical model with smooth price varaibility
+model_rent_geo_whole<-gam(price~bedrooms+s(x,y,k=100),
+        data=rent_,bs="cr",method='REML',
+        family=fam)
+
+print(summary(model_rent_geo_whole))
+
+pred_rent_whole <- raster(extent(mtl_land),res=100)
+crs(pred_rent_whole)<-crs(mtl_land)
+
+# need to predict response (link by default)
+my_predict<-function(...) predict(...,type="response")
+
+# predict 4 1/2 rents
+pred_rent_whole <- raster::interpolate(pred_rent_whole,model_rent_geo_whole, fun=my_predict, xyOnly=T,
+                                const=data.frame(bedrooms=2))
+pred_rent_whole <- mask(pred_rent_whole, mtl_land)
+```
+
+### Rental price map for 4 1/2
+```{r rent_spatial2, eval=TRUE, echo=FALSE, fig.height=7, fig.width=10, message=F, error=F} 
+
+tm_shape(osm_mtl)+tm_rgb(alpha=0.6)+
+   tm_shape(mtl_arr) + tm_borders(alpha=0.8, col='black')+
+   tm_shape(pred_rent_whole)+tm_raster(style="cont",alpha=0.7, title='$')+
+   tm_shape(subway_stop_p%>%dplyr::select(stop_name))+tm_symbols(col='blue',alpha=0.2,size=0.03)+
+   tm_shape(subway_p)+tm_lines(col='blue',alpha=0.2)+
+   tm_compass(position=c("right", "bottom"))+
+   tm_scale_bar(position=c("left", "bottom"))+
+   tm_layout(scale=1.5)
+```
+
+### Rental prices spatial model, central part
+```{r rent_spatial3, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
+ROI_buf<-ROI_p%>%summarize()%>%st_buffer(1000)
+
+# make a 1km buffer around ROI to avoid border effects
+kijiji_roi<-kijiji_geo_p%>%st_join(ROI_buf,left=F)
+
+rent<-kijiji_roi %>% mutate(bedrooms=as.factor(bedrooms))
+rent<-bind_cols(rent, as.data.frame(st_coordinates(rent)))%>%rename(x=X,y=Y)
+
+# create spatical model with smooth price varaibilyt
+model_rent_geo<-gam(price~bedrooms+s(x,y,k=100),
+        data=rent,bs="cr",method='REML',
+        family=fam)
+
+print(summary(model_rent_geo))
+
+pred_rent <- raster(extent(ROI_p),res=100)
+crs(pred_rent)<-crs(rent)
+
+# need to predict response (link by default)
+my_predict<-function(...) predict(...,type="response")
+
+# predict 4 1/2 rents
+pred_rent <- raster::interpolate(pred_rent,model_rent_geo,fun=my_predict, xyOnly=T,
+                                const=data.frame(bedrooms=2))
+pred_rent <- mask(pred_rent, ROI_p)
+```
+
+### Rental price map for 4 1/2
+```{r rent_spatial4, eval=TRUE, echo=FALSE, fig.height=7, fig.width=10, message=F, error=F} 
+  tm_shape(osm_roi) + tm_rgb(alpha=0.7) + 
+  tm_shape(ROI_p_аrr) + tm_borders(alpha=1.0,col='black',lwd=2)+
+  tm_shape(ROI_p_аrr%>%st_centroid()) + tm_text(text='arr',alpha=0.8,size=1)+
+  tm_shape(pred_rent)+
+  tm_raster(style="cont", alpha=0.8, breaks=seq(400,2000,by=200),title='$')+
+  tm_legend(position = c("left", "top"), 
+            frame = TRUE, outside = FALSE,
+            bg.color="white")+
+  tm_shape(subway_p) + tm_lines(col='blue',lwd=3,alpha=0.2)+
+  tm_shape(subway_stop_p) + tm_symbols(col='blue',size=0.2,alpha=0.2)+
+  tm_shape(ref_home) + tm_symbols(col='red',shape=4,size=1.0,alpha=0.9)+
+  tm_shape(ref_work) + tm_symbols(col='blue',shape=3,size=1.0,alpha=0.9)+
+  tm_compass(position=c("right", "bottom"))+
+  tm_scale_bar(position=c("left", "bottom"))+
+  tm_layout(scale=1.5)
+```
+
+### Plex price spatial model
+```{r plex_price_spatial1, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
+# filter out Apartments and houses
+plex_geo_p <- prop_geo_p %>% 
+  dplyr::filter( type != 'Apartment', type != 'House', mprice>0, area_interior>0 ) %>%
+  mutate(type=droplevels(type), parking=parking>0) %>% 
+  st_intersection(ROI_buf) 
+
+# remove outliers (only use entries between 1st and 99th percentile)
+plex_geo_p_lim<-plex_geo_p%>%as.data.frame()%>%group_by(nom_qr,type,bedrooms)%>%
+  summarize(
+    price_low = quantile(mprice,0.01), price_high = quantile(mprice,0.99),
+    area_low = quantile(area_interior,0.01), area_high = quantile(area_interior,0.99),
+  )
+
+plex_geo_p<- plex_geo_p %>% left_join(plex_geo_p_lim, by=c('nom_qr','type','bedrooms')) %>%
+  filter(mprice<=price_high, mprice>=price_low,
+         area_interior<=area_high,area_interior>=area_low) %>% 
+  dplyr::select(-price_high,-price_low,-area_high,-area_low)
+
+plex_geo_pp <- bind_cols(as.data.frame(plex_geo_p),
+                         as.data.frame(st_coordinates(plex_geo_p)))%>%
+              rename(x=X,y=Y) 
+
+# using GAM fit a simple spatial model of price per sqft
+model_psqf_geo<-gam(price_sqft ~ type + bedrooms + parking + s(x,y, k=100),
+        data=plex_geo_pp, bs="cr",method='REML',
+        family=fam)
+print(summary(model_psqf_geo))
+
+# using GAM fit a simple spatial model of surface
+model_area_geo<-gam(area_interior ~ type + bedrooms + parking + s(x,y, k=100),
+        data=plex_geo_pp, bs="cr",method='REML',
+        family=fam)
+print(summary(model_area_geo))
+
+# fitting survival data
+#mmt<-gam(time_on_market ~ type+parking + s(x,y,k=200),
+#        data=plex_geo_pp, bs="cr",
+#        family=cox.ph(), weight=!active)
+#print(summary(mmt))
+
+pred_price_sqft<-raster(extent(ROI_p),res=100)
+crs(pred_price_sqft)<-crs(ROI_p)
+
+pred_area<-raster(extent(ROI_p),res=100)
+crs(pred_area)<-crs(ROI_p)
+
+# make another raster for rent
+pred_rent <- raster(extent(ROI_p),res=100)
+crs(pred_rent)<-crs(ROI_p)
+
+# need to predict response (link by default)
+my_predict<-function(...) predict(...,type="response")
+
+# predicting price per sqft of a triplex with 3br and parking
+pred_price_sqft<-raster::interpolate(pred_price_sqft, model_psqf_geo, fun=my_predict, xyOnly=T,
+  const=data.frame(type='Triplex',bedrooms=3, parking=T))
+
+# predict average area of a triplex with 3br and parking
+pred_area<-raster::interpolate(pred_area, model_area_geo, fun=my_predict, xyOnly=T,
+  const=data.frame(type='Triplex',bedrooms=3, parking=T))
+pred_area <- mask(pred_area, ROI_p)
+
+# predict 4 1/2 rents in the same area
+pred_rent <- raster::interpolate(pred_rent,model_rent_geo,fun=my_predict, xyOnly=T,
+                                const=data.frame(bedrooms=2, parking=F))
+pred_rent <- mask(pred_rent, ROI_p)
+
+# predict survival after 60 days
+#pred_p<-raster::interpolate(pred_r, mmt, fun=my_predict, xyOnly=T,
+#  const=data.frame(type='Triplex', bedrooms=3, parking=T, time_on_market=60 ))
+
+pred_price_sqft<- mask(pred_price_sqft, ROI_p)
+
+# profitability of a triplex : rent for the whole year / total price
+pred_prof <- pred_rent*12/(pred_price_sqft*pred_area)
+```
+
+### Price per sqft for a triplex with 3br and parking in ROI
+```{r plex_price_spatial2, eval=TRUE, echo=FALSE, fig.height=7, fig.width=10, message=F, error=F} 
+tm_shape(osm_roi) + tm_rgb(alpha=0.7) + 
+  tm_shape(pred_price_sqft)+
+  tm_raster(style="cont",alpha=0.9,title='$' )+
+  tm_legend(position = c("left", "top"), 
+            frame = TRUE,outside = FALSE,
+            bg.color="white")+
+  tm_shape(ROI_p_аrr) + tm_borders(alpha=1.0,col='black',lwd=2)+
+  tm_shape(ROI_p_аrr%>%st_centroid()) + tm_text(text='arr',alpha=0.8,size=0.5)+
+  tm_shape(subway_p) + tm_lines(col='blue',lwd=3,alpha=0.2)+
+  tm_shape(subway_stop_p) + tm_symbols(col='blue',size=0.2,alpha=0.2)+
+  tm_shape(ref_home) + tm_symbols(col='red',shape=4,size=1.0,alpha=0.9)+
+  tm_shape(ref_work) + tm_symbols(col='blue',shape=3,size=1.0,alpha=0.9)+
+  tm_compass(position=c("right", "bottom"))+
+  tm_scale_bar(position=c("left", "bottom"))+
+  tm_layout(scale=1.5)
+```
+
+###  area for a triplex with 3br and parking in ROI
+```{r plex_area_spatial3, eval=TRUE, echo=FALSE, fig.height=7, fig.width=10, message=F, error=F} 
+tm_shape(osm_roi) + tm_rgb(alpha=0.7) + 
+  tm_shape(pred_area)+
+  tm_raster(style="cont",alpha=0.9,title='sqft' )+
+  tm_legend(position = c("left", "top"), 
+            frame = TRUE,outside = FALSE,
+            bg.color="white")+
+  tm_shape(ROI_p_аrr) + tm_borders(alpha=1.0,col='black',lwd=2)+
+  tm_shape(ROI_p_аrr%>%st_centroid()) + tm_text(text='arr',alpha=0.8,size=0.5)+
+  tm_shape(subway_p) + tm_lines(col='blue',lwd=3,alpha=0.2)+
+  tm_shape(subway_stop_p) + tm_symbols(col='blue',size=0.2,alpha=0.2)+
+  tm_shape(ref_home) + tm_symbols(col='red',shape=4,size=1.0,alpha=0.9)+
+  tm_shape(ref_work) + tm_symbols(col='blue',shape=3,size=1.0,alpha=0.9)+
+  tm_compass(position=c("right", "bottom"))+
+  tm_scale_bar(position=c("left", "bottom"))+
+  tm_layout(scale=1.5)
+```
+
+
+### Triplex Profitability (rent per year/triplex total price)
+```{r plex_profitability_spatial,eval=TRUE, echo=FALSE, fig.height=7, fig.width=10, message=F, error=F} 
+tm_shape(osm_roi) + tm_rgb(alpha=0.7) + 
+  tm_shape(pred_prof)+
+  tm_raster(style="cont",alpha=0.9, title='rent/total_price')+
+  tm_legend(position = c("left", "top"), 
+            frame = TRUE,outside = FALSE,
+            bg.color="white")+
+  tm_shape(ROI_p_аrr) + tm_borders(alpha=1.0,col='black',lwd=2)+
+  tm_shape(ROI_p_аrr%>%st_centroid()) + tm_text(text='arr',alpha=0.8,size=0.5)+
+  tm_shape(subway_p) + tm_lines(col='blue',lwd=3,alpha=0.2)+
+  tm_shape(subway_stop_p) + tm_symbols(col='blue',size=0.2,alpha=0.2)+
+  tm_shape(ref_home) + tm_symbols(col='red',shape=4,size=1.0,alpha=0.9)+
+  tm_shape(ref_work) + tm_symbols(col='blue',shape=3,size=1.0,alpha=0.9)+
+  tm_compass(position=c("right", "bottom"))+
+  tm_scale_bar(position=c("left", "bottom"))+
+  tm_layout(scale=1.5)
+```
+
+```{r eval=TRUE, echo=FALSE, fig.height=7, fig.width=10, message=F, error=F} 
+if(F){
+## Spatial survival model
+tm_shape(osm_roi) + tm_rgb(alpha=0.7) + 
+  tm_shape(pred_p)+ tm_raster(style="cont",alpha=0.9, title="p")+
+  tm_legend(position = c("left", "top"), 
+            frame = TRUE,outside = FALSE,
+            bg.color="white")+
+  tm_shape(mtl_p) + tm_borders()+
+  tm_shape(subway_p) + tm_lines(col='red',lwd=3)+
+  tm_shape(subway_stop_p) + tm_symbols(col='blue',size=0.2)+
+  tm_compass(position=c("right", "bottom"))+
+  tm_scale_bar(position=c("left", "bottom"))+
+  tm_layout(scale=1.5,title='p triplex with parking still on the market after 60 days',scale=2)
+}
+```
+
+
+# Plexes Longitudinal price model: Plateau, Ahuntsic, Rosemont, Villeray
+```{r plex_longitudinal1, eval=TRUE, echo=FALSE}
+
+# make ROI smaller
+ROI_p<-ROI_p%>%filter(arr %in% c('Plateau','Villeray','Rosemont','Ahuntsic'))
+
+# select only property in these ROI
+prop_interesting <- prop_geo_p %>% st_join(ROI_p,left=F) %>%
+  as.data.frame() %>% 
+  filter(type != "House", 
+         price>0, area_interior<10000, area_interior>500) %>% 
+  mutate(type=droplevels(type), arr=droplevels(arr),
+         parking=as.factor(parking>0))
+
+# determine start and end date for each property type for each area
+prop_interesting_lim <- prop_interesting %>% 
+  as.data.frame() %>% group_by(arr, type) %>% 
+  summarize( begin_date=min(start_date), 
+               end_date=max(start_date) )
+```
+
+
+```{r plex_longitudinal2, eval=TRUE, echo=FALSE, message=FALSE}
+model_psqft_arr_t <- gam(price_sqft ~ type+arr+parking + 
+  s(start_date, by=type, k=6) + s(start_date, by=arr, k=6),
+          data=prop_interesting, bs="cr",
+          family=fam, method='REML')
+
+print(summary(model_psqft_arr_t))
+
+# calculate regression values
+
+simul<-expand.grid(type=levels(prop_interesting$type),
+                   arr=levels(prop_interesting$arr),
+                   parking=c(T),
+                   first_ts=seq(min(neighbors_$first_ts), max(neighbors_$first_ts),by='day'))%>%
+  mutate(start_date=as.numeric(first_ts)) %>%
+  inner_join(prop_interesting_lim, by=c('type','arr') ) %>% 
+  filter(start_date>=begin_date,start_date<=end_date)
+
+# predict price
+ppp<-predict(model_psqft_arr_t, newdata=simul, se.fit=T)
+simul$price_sqft<-ilink(ppp$fit)
+simul$price_sqft_upr<-ilink(ppp$fit+2*ppp$se.fit)
+simul$price_sqft_lwr<-ilink(ppp$fit-2*ppp$se.fit)
+```
+
+```{r plex_longitudinal3, eval=TRUE, echo=FALSE, message=FALSE, fig.height=7, fig.width=10, error=F}
+ggplot(simul, aes(x=first_ts, y=price_sqft, ymin=price_sqft_lwr, ymax=price_sqft_upr))+
+  facet_grid(type~arr)+
+  ylab('price/sqft')+xlab('Date')+
+  geom_line()+geom_ribbon(alpha=0.4,lty=2)+
+  scale_x_date()+
+  theme(
+        axis.text.x =element_text(angle=60, hjust=1, size=12)
+    )
+```

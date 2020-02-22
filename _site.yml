@@ -1,0 +1,4 @@
+name: "Montreal real estate statistics"
+exclude: ["*"]
+include: ["index_files"]
+output_dir: "docs"
