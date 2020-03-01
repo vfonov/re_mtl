@@ -199,7 +199,8 @@ $(document).ready(function () {
 <li><a href="#condo-price">Condo price</a><ul>
 <li><a href="#neighborhood-map">Neighborhood map</a></li>
 <li><a href="#neighbourhood-condo-prices">Neighbourhood condo prices</a><ul>
-<li><a href="#glm-model">glm model</a></li>
+<li><a href="#linear-model">linear model</a></li>
+<li><a href="#generalized-linear-model">generalized linear model</a></li>
 <li><a href="#price-per-square-foot">price per square foot</a></li>
 <li><a href="#longitudinal-condo-price-model">Longitudinal condo price model</a></li>
 <li><a href="#longitudinal-condo-price-modelgam-model">Longitudinal condo price model:GAM model</a></li>
@@ -227,13 +228,13 @@ $(document).ready(function () {
 
 <div id="introduction" class="section level1">
 <h1>Introduction</h1>
-<p>I happen to live in Montreal, in my condo on the edge of McGill Ghetto. Close to St. Laurance street, or the Maine as locals call it, with all it’s attractions - bars, restaurants, night clubs, drunken students. And once upone a time, on a particular lively night, listenining to the sounds of McGill frosh students drunkenly heading home after hard night of stydying. I thought, that it might be a good idea to move into my own house, a little bit further away from the action.</p>
+<p>I happen to live in Montreal, in my condo on the edge of McGill Ghetto. Close to Saint Laurent Boulevard, or the Maine as locals call it, with all it’s attractions - bars, restaurants, night clubs, drunken students. And once upon a time, on a particular lively night, listening to the sounds of McGill frosh students drunkenly heading home after hard night of studying. I thought, that it might be a good idea to move into my own house, a little bit further away from the action.</p>
 <div class="figure">
 <img src="https://lh3.googleusercontent.com/dbTAfxtkpQMpoc127V6IfwqL65jrEVIJ46fxgU5cYDE5cBiEqJG1mA3Ovzg9X8D-m6ZXhjPNLyr1AJZvWtgOiCJd_UME4K0kM48MbDM5k2VqHoScIk8VWbqkLRykPKa83gaqeDnQiA7_pB4Jo4gNQLLmdDJBIXeYuD21h1A_w5NiPukzswyuHx1Xlx9hE20klXeWTL36fyzU7mOMoVFaU8Hf8L4ugkx5bIZ0JsN0GMfOnw7-ZfkpC7ZyrR3tlgiTgvU1flxeBBgme31GMfHFGjnRxQq5HqmaKY29sE7UlY71d0sGB3f_mrQiDzbQw6PwC4n0-BdvHTWsHjQH3-Q0RXxdF7_ChJMujr0fAVSwCj5CO96sZKIsd1lLtNGvYV2E1KaeUDRRP3dz126nhUF2AoiG8EWwW7X9JkfJV8aRNbnJE6B1wlTSSPS2CCpztObH_-l0UpFiiwoEHlo_1NgXW9Z4OWUeq7UkKmOYQelm2RKmHffIDUFVbwUw_QXGcqu9Ep31tpEgjD7GA-oBkO9JJXyhG_rAUVmUYFiBEXr8CamJvtRDMnK_fok2nKAEuETuLyYE-4w5TwfkWvNIucm7Ya01LLoAqH333VoPloiY2vNrKA0Dmton9A7nT7b5WTQJH1EpsiycnpJS5zBXRS8BOzJeCtWay6vRxET04kjS2H48CX1d7GMG=w724-h543-no" alt="Image" />
 <p class="caption">Image</p>
 </div>
-<p>It was not my first rodeo, buyin a real estate in Montreal, but first time buying a house. So, I decided to do a little bit of reasearch, before trusting my money to a real estate agent. I quickly realized that I can’t afford a house anywhere close to the subway station on the Island, but I could possible afford a duplex or a triplex, where tennants would be covering part of my mortgage. The solution to this problem depends not only on the price of the house, but also on the rent or potentinal rent that the tenants could be paying.</p>
-<p>So, being a visual person with background in research, I wanted to see a visual map of how much things cost around the island , and how much revenue I could get. In the States, and even in Ontario there are services like Zillow that can show some of the information, but for Montreal I couldn’t find anything, apart from the realtor association (APCIQ)[<a href="https://apciq.ca/en/real-estate-market/" class="uri">https://apciq.ca/en/real-estate-market/</a>]. Maybe my preference of using English language is to blame.</p>
+<p>It was not my first rodeo, buying a real estate in Montreal, but first time buying a house. So, I decided to do a little bit of research, before trusting my money to a real estate agent. I quickly realized that I can’t afford a house anywhere close to the subway station on the Island, but I could possible afford a duplex or a triplex, where tenants would be covering part of my mortgage. The solution to this problem depends not only on the price of the house, but also on the rent or potential rent that the tenants could be paying.</p>
+<p>So, being a visual person with background in research, I wanted to see a visual map of how much things cost around the island , and how much revenue I could get. In the States, and even in Ontario there are services like Zillow that can show some of the information, but for Montreal I couldn’t find anything, apart from the realtor association <a href="https://apciq.ca/en/real-estate-market/">APCIQ</a>. Maybe my preference of using English language is to blame.</p>
 <p>So, after a few weeks of studying realtor.ca and kijiji, I wrote a python script to scrape information from them, using some resources I found on github: <a href="https://github.com/Froren/realtorca" class="uri">https://github.com/Froren/realtorca</a> . Also, city of Montreal have an open data web site, that helps to fill-out some blanks.</p>
 <p>After the data is collected by webscrappers it is processed in R, using <a href="https://www.tidyverse.org/">tidy-verse</a>, <a href="https://r-spatial.github.io/sf/index.html">Simple Features for R</a>. I found excellent resources on how to process geospatial information in R: <a href="https://geocompr.robinlovelace.net">Geocomputation with R</a>, I used <a href="https://ggplot2.tidyverse.org/">ggplot2</a> to make graphs and <a href="https://github.com/mtennekes/tmap">thematic maps</a> for map making.</p>
 <p>Now I have more then a year worth of data to study.</p>
@@ -270,7 +271,9 @@ ggplot(neighbors_, aes(y=price, x=area_interior, col=parking))+
   coord_cartesian(xlim=c(400,2000),ylim=c(2e5,1e6))+
   ylab(&#39;Price&#39;)+xlab(&#39;Surface sqft&#39;)</code></pre>
 <p><img src="stats_eng_files/figure-html/neighborhood_lm1-1.svg" /><!-- --></p>
-<p>Now, more formally I can use linear model to predict price and confidence intervals</p>
+<p>Мore formally I can use linear model to predict price and confidence intervals</p>
+<div id="linear-model" class="section level3">
+<h3>linear model</h3>
 <pre><code>## 
 ## Call:
 ## lm(formula = mprice ~ parking:area_interior, data = neighbors_)
@@ -290,15 +293,16 @@ ggplot(neighbors_, aes(y=price, x=area_interior, col=parking))+
 ## Residual standard error: 129400 on 312 degrees of freedom
 ## Multiple R-squared:  0.6974, Adjusted R-squared:  0.6955 
 ## F-statistic: 359.6 on 2 and 312 DF,  p-value: &lt; 2.2e-16</code></pre>
-<p>So, in my neighborhood every square foot in a condo without parking adds 444$ to the base price of 33k$ , and with parking it is 523$ per square foot. And now I can make a prediction of the price:</p>
+<p>So, in my neighborhood every square foot in a condo without parking adds 437$ to the base price of 42k$ , and with parking it is 512$ per square foot. And now I can make a prediction of the price:</p>
 <pre><code>## Prediction:443227 [421633, 464820]</code></pre>
 <p>However, if I look at the difference between what my model predicts for all the condos in the neighborhood and the prices, I can see that error depends on the predicted value:</p>
 <p><img src="stats_eng_files/figure-html/neighborhood_lm_resid-1.svg" /><!-- --></p>
 <p>Therefore violating one of the conditions where simple linear regression can be used. This kind of behaviour is called <a href="https://en.wikipedia.org/wiki/Overdispersion">overdispersion</a>, and there are several ways of dealing with it. In particular, I found in the literature that I should be using a <a href="https://en.wikipedia.org/wiki/Generalized_linear_model">generalized linear model</a> with <a href="https://en.wikipedia.org/wiki/Inverse_Gaussian_distribution">inverse Gaussian distribution</a> for errors and logarithmic link function.</p>
-<div id="glm-model" class="section level3">
-<h3>glm model</h3>
+</div>
+<div id="generalized-linear-model" class="section level3">
+<h3>generalized linear model</h3>
 <p><img src="stats_eng_files/figure-html/neighborhood_glm1-1.svg" /><!-- --></p>
-<p>Now the estimate using generalized linear model is following:</p>
+<p>The estimate using generalized linear model is following:</p>
 <pre><code>## 
 ## Call:
 ## glm(formula = mprice ~ parking:area_interior, family = inverse.gaussian(link = &quot;log&quot;), 
@@ -324,7 +328,7 @@ ggplot(neighbors_, aes(y=price, x=area_interior, col=parking))+
 ## 
 ## Number of Fisher Scoring iterations: 4</code></pre>
 <pre><code>## Prediction:436436 [421530, 451870]</code></pre>
-<p>Note that I am ignoring number of rooms, floor of the building and the location of the condo for simplicity. It is possible to plug them all in into the regression, but it will increase number of parameters and make modelling results more difficult to enterpret. Also, many parameters are correlated, for example bigger apprtments tend to have more rooms and there a more of them with parking.</p>
+<p>Note that I am ignoring number of rooms, floor of the building and the location of the condo for simplicity. It is possible to plug them all in into the regression, but it will increase number of parameters and make modelling results more difficult to interpret. Also, many parameters are correlated, for example bigger apartments tend to have more rooms and there a more of them with parking.</p>
 <p>Now, for the sake of simplicity of comparing different properties, I could estimate price per square foot, and how it is affected by different factors.</p>
 <p>Again, using <em>generalized linear model</em> with <em>inverse Gaussian</em> distribution and <em>log</em> link:</p>
 </div>
@@ -361,7 +365,7 @@ ggplot(neighbors_, aes(y=price, x=area_interior, col=parking))+
 <pre class="r"><code>print(exp(model_psqft$coeff))</code></pre>
 <pre><code>## (Intercept) parkingTRUE   bedrooms2   bedrooms3   bedrooms4 
 ## 501.7826165   1.1215192   0.9769839   0.9818974   0.8349424</code></pre>
-<p>So, the square foot is worth 503$, parking adds 12% , two bedrooms reduce price by 2.8%, three bedrooms by 3.3%, four bedrooms 17% (given the same total price).</p>
+<p>So, the square foot is worth 501$, parking adds 12% , two bedrooms reduce price by 2.4%, three bedrooms by 1.2%, four bedrooms 17% (given the same total price).</p>
 <p>The predicted price of my condo is :</p>
 <pre><code>## 431048 [414196, 448586]</code></pre>
 </div>
@@ -381,7 +385,7 @@ ggplot(neighbors_, aes(y=price, x=area_interior, col=parking))+
 <div id="longitudinal-condo-price-modelgam-model" class="section level3">
 <h3>Longitudinal condo price model:GAM model</h3>
 <pre class="r"><code># price model with time
-# k=20, but k=100 produces almost exactly the same result
+# k=24, but k=100 produces almost exactly the same result
 model_psqft_t &lt;- gam(price_sqft ~ bedrooms + parking + s(start_date, k=24) ,
           data=neighbors_, bs=&quot;cr&quot;,method=&#39;REML&#39;,
           family=inverse.gaussian(link=&quot;log&quot;))</code></pre>
@@ -432,7 +436,7 @@ p</code></pre>
 </div>
 <div id="plex-price-estimate" class="section level1">
 <h1>Plex price estimate</h1>
-<p>Similarly, when I am looking at the potential plex I would like to know how much houses cost in the neighborhood. Let’s say within 2km radius of the plex I am interested:</p>
+<p>Similarly, when I am looking at the potential plex I would like to know how much houses cost in the neighborhood. Let’s say within 2km radius of the plex I was interested at some point:</p>
 <pre class="r"><code>selected_mls=17758383
 max_distance=2000# 2km
 
@@ -486,7 +490,7 @@ result &lt;- st_intersection(plex_pe %&gt;% filter(mls!=selected_mls), search_ro
 ## 
 ## Number of Fisher Scoring iterations: 7</code></pre>
 <pre><code>## Prediction: 567062 [521631, 616451]</code></pre>
-<p>To estimate the rentals prices in the neighborhood I can find all the appartments l isted on Kijiji during last year close by. <img src="stats_eng_files/figure-html/plex_rentals_map-1.svg" /><!-- --></p>
+<p>To estimate the rentals prices in the neighborhood I can find all the appartments listed on Kijiji during last year close by. <img src="stats_eng_files/figure-html/plex_rentals_map-1.svg" /><!-- --></p>
 <p>The price distribution gives me idea how much I could be potentially getting from the tennants. Of course there might be existing tenants already, so it would show me if what they are paying is close to what’s currently on the market. <img src="stats_eng_files/figure-html/plex_rentals_boxplot-1.svg" /><!-- --></p>
 </div>
 </div>
@@ -560,7 +564,7 @@ pred_rent_whole &lt;- mask(pred_rent_whole, mtl_land)</code></pre>
 </div>
 <div id="plexes-price-spatial-model" class="section level3">
 <h3>Plexes price spatial model</h3>
-<p>In a same fashion, I can model distribution of the prices per square foot for triplexes with 3br main appartment and parking.</p>
+<p>In a same fashion, I can model distribution of the prices per square foot for triplexes with 3br main apartment and parking.</p>
 <pre><code>## 
 ## Family: inverse.gaussian 
 ## Link function: log 
@@ -628,7 +632,7 @@ pred_rent_whole &lt;- mask(pred_rent_whole, mtl_land)</code></pre>
 </div>
 <div id="triplex-profitability-rent-per-yeartriplex-total-price" class="section level3">
 <h3>Triplex Profitability (rent per year/triplex total price)</h3>
-<p>This way I can roughly estimate profitability of triplexes in different parts of town. By calculating a total price and dividing by the potential income of two two-bedroom appartments rented for the year. Of course this is very rough estimate, since I am assuming that all triplexes will have two 4 1/2 apartments for rent.</p>
+<p>This way I can roughly estimate profitability of triplexes in different parts of town. By calculating a total price and dividing by the potential income of two two-bedroom apartments rented for the year. Of course this is very rough estimate, since I am assuming that all triplexes will have two 4 1/2 apartments for rent.</p>
 <p><img src="stats_eng_files/figure-html/plex_profitability_spatial-1.svg" /><!-- --></p>
 </div>
 </div>
@@ -681,11 +685,11 @@ pred_rent_whole &lt;- mask(pred_rent_whole, mtl_land)</code></pre>
 </div>
 <div id="source-code-and-data" class="section level1">
 <h1>Source code and data</h1>
-<p>The complete source of scripts used for this publication is publicly available on github: (<a href="https://github.com/vfonov/re_mtl" class="uri">https://github.com/vfonov/re_mtl</a>).</p>
+<p>The complete source of all scripts used for this publication is publicly available on github: (<a href="https://github.com/vfonov/re_mtl" class="uri">https://github.com/vfonov/re_mtl</a>) , version of this article rendered using <a href="https://rmarkdown.rstudio.com/">rmarkdown</a> is available at <a href="http://www.ilmarin.info/re_mtl/stats_eng.html" class="uri">http://www.ilmarin.info/re_mtl/stats_eng.html</a></p>
 </div>
 <div id="interactive-map-of-prices-distribution" class="section level1">
 <h1>Interactive map of prices distribution</h1>
-<p>Results are also showin in an interactive dashboard on (<a href="http://www.ilmarin.info/re_mtl/" class="uri">http://www.ilmarin.info/re_mtl/</a>)</p>
+<p>Results are also shown in an interactive dashboard on (<a href="http://www.ilmarin.info/re_mtl/" class="uri">http://www.ilmarin.info/re_mtl/</a>)</p>
 </div>
 
 
