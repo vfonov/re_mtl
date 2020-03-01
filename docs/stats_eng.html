@@ -195,6 +195,7 @@ $(document).ready(function () {
 <div id="TOC">
 <ul>
 <li><a href="#introduction">Introduction</a></li>
+<li><a href="#data-preprocessing">Data preprocessing</a></li>
 <li><a href="#condo-price">Condo price</a><ul>
 <li><a href="#neighborhood-map">Neighborhood map</a></li>
 <li><a href="#neighbourhood-condo-prices">Neighbourhood condo prices</a><ul>
@@ -226,65 +227,26 @@ $(document).ready(function () {
 
 <div id="introduction" class="section level1">
 <h1>Introduction</h1>
-<p>I happen to live in Montreal, in my condo on the edge of McGill Ghetto. Close to St. Laurance street, or the Maine as locals call it, with all it’s attractions - bars, restaurants, night clubs, drunken students. And once upone a time, on a particular lively night, listenining to the sounds of McGill frosh students drunkenly heading home after hard night of stydying. I thought, that it might be a good idea to move into my own house, a little bit further away from the action. (Muzique photo) <img src="https://lh3.googleusercontent.com/dbTAfxtkpQMpoc127V6IfwqL65jrEVIJ46fxgU5cYDE5cBiEqJG1mA3Ovzg9X8D-m6ZXhjPNLyr1AJZvWtgOiCJd_UME4K0kM48MbDM5k2VqHoScIk8VWbqkLRykPKa83gaqeDnQiA7_pB4Jo4gNQLLmdDJBIXeYuD21h1A_w5NiPukzswyuHx1Xlx9hE20klXeWTL36fyzU7mOMoVFaU8Hf8L4ugkx5bIZ0JsN0GMfOnw7-ZfkpC7ZyrR3tlgiTgvU1flxeBBgme31GMfHFGjnRxQq5HqmaKY29sE7UlY71d0sGB3f_mrQiDzbQw6PwC4n0-BdvHTWsHjQH3-Q0RXxdF7_ChJMujr0fAVSwCj5CO96sZKIsd1lLtNGvYV2E1KaeUDRRP3dz126nhUF2AoiG8EWwW7X9JkfJV8aRNbnJE6B1wlTSSPS2CCpztObH_-l0UpFiiwoEHlo_1NgXW9Z4OWUeq7UkKmOYQelm2RKmHffIDUFVbwUw_QXGcqu9Ep31tpEgjD7GA-oBkO9JJXyhG_rAUVmUYFiBEXr8CamJvtRDMnK_fok2nKAEuETuLyYE-4w5TwfkWvNIucm7Ya01LLoAqH333VoPloiY2vNrKA0Dmton9A7nT7b5WTQJH1EpsiycnpJS5zBXRS8BOzJeCtWay6vRxET04kjS2H48CX1d7GMG=w724-h543-no" alt="Image" /></p>
+<p>I happen to live in Montreal, in my condo on the edge of McGill Ghetto. Close to St. Laurance street, or the Maine as locals call it, with all it’s attractions - bars, restaurants, night clubs, drunken students. And once upone a time, on a particular lively night, listenining to the sounds of McGill frosh students drunkenly heading home after hard night of stydying. I thought, that it might be a good idea to move into my own house, a little bit further away from the action.</p>
+<div class="figure">
+<img src="https://lh3.googleusercontent.com/dbTAfxtkpQMpoc127V6IfwqL65jrEVIJ46fxgU5cYDE5cBiEqJG1mA3Ovzg9X8D-m6ZXhjPNLyr1AJZvWtgOiCJd_UME4K0kM48MbDM5k2VqHoScIk8VWbqkLRykPKa83gaqeDnQiA7_pB4Jo4gNQLLmdDJBIXeYuD21h1A_w5NiPukzswyuHx1Xlx9hE20klXeWTL36fyzU7mOMoVFaU8Hf8L4ugkx5bIZ0JsN0GMfOnw7-ZfkpC7ZyrR3tlgiTgvU1flxeBBgme31GMfHFGjnRxQq5HqmaKY29sE7UlY71d0sGB3f_mrQiDzbQw6PwC4n0-BdvHTWsHjQH3-Q0RXxdF7_ChJMujr0fAVSwCj5CO96sZKIsd1lLtNGvYV2E1KaeUDRRP3dz126nhUF2AoiG8EWwW7X9JkfJV8aRNbnJE6B1wlTSSPS2CCpztObH_-l0UpFiiwoEHlo_1NgXW9Z4OWUeq7UkKmOYQelm2RKmHffIDUFVbwUw_QXGcqu9Ep31tpEgjD7GA-oBkO9JJXyhG_rAUVmUYFiBEXr8CamJvtRDMnK_fok2nKAEuETuLyYE-4w5TwfkWvNIucm7Ya01LLoAqH333VoPloiY2vNrKA0Dmton9A7nT7b5WTQJH1EpsiycnpJS5zBXRS8BOzJeCtWay6vRxET04kjS2H48CX1d7GMG=w724-h543-no" alt="Image" />
+<p class="caption">Image</p>
+</div>
 <p>It was not my first rodeo, buyin a real estate in Montreal, but first time buying a house. So, I decided to do a little bit of reasearch, before trusting my money to a real estate agent. I quickly realized that I can’t afford a house anywhere close to the subway station on the Island, but I could possible afford a duplex or a triplex, where tennants would be covering part of my mortgage. The solution to this problem depends not only on the price of the house, but also on the rent or potentinal rent that the tenants could be paying.</p>
 <p>So, being a visual person with background in research, I wanted to see a visual map of how much things cost around the island , and how much revenue I could get. In the States, and even in Ontario there are services like Zillow that can show some of the information, but for Montreal I couldn’t find anything, apart from the realtor association (APCIQ)[<a href="https://apciq.ca/en/real-estate-market/" class="uri">https://apciq.ca/en/real-estate-market/</a>]. Maybe my preference of using English language is to blame.</p>
 <p>So, after a few weeks of studying realtor.ca and kijiji, I wrote a python script to scrape information from them, using some resources I found on github: <a href="https://github.com/Froren/realtorca" class="uri">https://github.com/Froren/realtorca</a> . Also, city of Montreal have an open data web site, that helps to fill-out some blanks.</p>
-<p>After the data is collected by webscrappers it is processed in R, using <a href="www.tidyverse.org">tidy-verse</a>, <a href="https://r-spatial.github.io/sf/index.html">Simple Features for R</a>. I found excellent resources on how to process geospatial information in R: <a href="https://geocompr.robinlovelace.net">Geocomputation with R</a>, I used <a href="">ggplot2</a> to make graphs and <a href="https://github.com/mtennekes/tmap">thematic maps</a> for map making.</p>
+<p>After the data is collected by webscrappers it is processed in R, using <a href="https://www.tidyverse.org/">tidy-verse</a>, <a href="https://r-spatial.github.io/sf/index.html">Simple Features for R</a>. I found excellent resources on how to process geospatial information in R: <a href="https://geocompr.robinlovelace.net">Geocomputation with R</a>, I used <a href="https://ggplot2.tidyverse.org/">ggplot2</a> to make graphs and <a href="https://github.com/mtennekes/tmap">thematic maps</a> for map making.</p>
 <p>Now I have more then a year worth of data to study.</p>
-<pre class="r"><code># first we setup packages needed
-library(tidyverse)
-# simple features for geographic data
+</div>
+<div id="data-preprocessing" class="section level1">
+<h1>Data preprocessing</h1>
+<p>I preprocess the data by converting it into simple-features format first, and then changing the <a href="https://spatialreference.org/ref/epsg/wgs-84/">geographic coordinate reference system (longitude and latitude)</a> to <a href="https://spatialreference.org/ref/epsg/nad83-mtm-zone-8/">North American projection for Quebec and Ontario</a></p>
+<pre class="r"><code>library(tidyverse)
 library(sf)
 
-# thematic maps and additional tools
-library(tmap)
-library(tmaptools)
-
-# GAM modelling
-library(mgcv)
-# raster operations
-library(raster)
-# geo-spatial data from open street maps
-library(osmdata)
-
-# for survival analysis
-library(survival)
-library(survminer)
-
-# physical units (disances, areas)
-library(units)
-
-# working with time
-library(lubridate)
-
-# additional statistical methods
-library(MASS)
-
-# default ggplot2 theme
-theme_set(theme_bw(base_size = 14, base_family = &quot;Arial&quot;)+
-  theme(
-        axis.text   = element_text(vjust = 0.2, size = 12),
-        axis.title = element_text(face = &#39;bold&#39;, vjust = 0.2, size = 20),
-        plot.title = element_text(face = &#39;bold&#39;, vjust = 2.0, size = 20),
-        strip.text = element_text(face = &#39;bold&#39;, size = 12),
-        plot.margin = unit(c(1.0,0.2,0.2,0.2), &quot;cm&quot;),
-        legend.position=&#39;bottom&#39;
-    ))
-
-# data is preprocessed by another script and stored for analysis
-load(&#39;preprocessed.RData&#39;)
-
-# work location
-ref_work&lt;-data.frame(latitude=45.530657, 
-                     longitude=-73.613654)%&gt;%
-  st_as_sf(coords=c(&#39;longitude&#39;,&#39;latitude&#39;),crs=4326) %&gt;% 
-  st_transform(crs=32188, check=T, partial=F)  
-
-# standard tmap features
-tmap_std&lt;-tm_compass(position=c(&quot;right&quot;, &quot;bottom&quot;))+
-  tm_scale_bar(position=c(&quot;left&quot;, &quot;bottom&quot;))+
-  tm_layout(scale=1.5)</code></pre>
+property&lt;-read_csv(&quot;....&quot;) %&gt;% 
+ st_as_sf(coords=c(&quot;lng&quot;,&quot;lat&quot;), crs=4326) %&gt;% 
+ st_transform(crs=32188)</code></pre>
 </div>
 <div id="condo-price" class="section level1">
 <h1>Condo price</h1>
