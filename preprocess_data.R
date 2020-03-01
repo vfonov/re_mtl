@@ -74,10 +74,45 @@ if(file.exists("uniteevaluationfonciere.RDS")) {
   eval<-readRDS(file="uniteevaluationfonciere.RDS")
 } else {
   # file from Montreal web site
-  eval<-geojson_sf('20191010/uniteevaluationfonciere.geojson')
+  eval<-geojson_sf('uniteevaluationfonciere.geojson')
   eval<-st_transform(eval, 32188)
   saveRDS(eval, file = "uniteevaluationfonciere.RDS",compress='xz')
 }
+
+# Montreal neighborhoods
+# load definition of neigbourhoods
+mtl_p<-geojson_sf('quartierreferencehabitation.geojson') %>% 
+  mutate(nom_arr=if_else(is.na(nom_arr),nom_mun,nom_arr)) %>% 
+  mutate(nom_qr=if_else(is.na(nom_qr),nom_arr,nom_qr)) %>%
+  st_transform(32188) %>% st_buffer(dist=0)
+
+# aggregate across QR
+mtl_pa<-mtl_p%>%group_by(nom_arr)%>%summarize() 
+
+# the whole island borders
+mtl_all<-mtl_p%>%summarize()%>%st_buffer(dist=0)%>%st_simplify(dTolerance=100)
+
+if(file.exists("mtl_grid.RDS")) {
+  mtl_grid<-readRDS(file="mtl_grid.RDS")
+} else {
+  # create hex mesh on top of Montreal 
+  # 500m cell size
+  mtl_grid<-st_make_grid(st_as_sfc(st_bbox(mtl_all)), cellsize = 500, square = FALSE)
+  mtl_grid<-st_intersection(mtl_grid, mtl_all)
+  # make an object with grid area and id
+  mtl_grid<-st_sf(mtl_grid,area=st_area(mtl_grid),
+    hexid=as.factor(seq(length(mtl_grid))),
+    agr=c(area="aggregate",hexid="identity"))
+  saveRDS(mtl_grid, file = "mtl_grid.RDS",compress='xz')
+}
+
+# and another , larger grid just for visualization
+mtl_grid2<-st_make_grid(st_as_sfc(st_bbox(mtl_all)), cellsize = 2000, square = FALSE)
+# remove anything outside of mtl
+mtl_grid2<-st_intersection(mtl_grid2, mtl_all)
+mtl_grid2<-st_sf(mtl_grid2,area=st_area(mtl_grid2),
+                 hexid=as.factor(seq(length(mtl_grid2))),
+                 agr=c(area="aggregate",hexid="identity"))
 
 # all data is stored in sqlite database
 con<-DBI::dbConnect(RSQLite::SQLite(), "property.sqlite3")
@@ -99,6 +134,31 @@ all_entries<-DBI::dbReadTable(con,"property") %>%
          type=if_else(type=="Row / Townhouse",'House',type) ) # don't distinguish Townhouse from Houses
 
 DBI::dbDisconnect(con)
+
+# AirBNB data from InsideAirBNB
+if(F) {
+airbnb<-read_csv('airbnb_20191116_vis_listings.csv',
+  col_types = cols(
+  id = col_double(),
+  name = col_character(),
+  host_id = col_double(),
+  host_name = col_character(),
+  neighbourhood_group = col_logical(),
+  neighbourhood = col_character(),
+  latitude = col_double(),
+  longitude = col_double(),
+  room_type = col_character(),
+  price = col_double(),
+  minimum_nights = col_double(),
+  number_of_reviews = col_double(),
+  last_review = col_date(format = "%Y-%m-%d"),
+  reviews_per_month = col_double(),
+  calculated_host_listings_count = col_double(),
+  availability_365 = col_double()
+) ) %>% 
+  st_as_sf(coords=c('longitude','latitude'),crs=4326) %>% 
+  st_transform(crs=32188)
+}
 
 # set undefined data to NA
 for(v in c('bathrooms', 'bedrooms', 'units', "area_interior", "area_exterior", "area_land",'stories','frontage') ) {
@@ -152,14 +212,7 @@ prop_geo_p<-st_join(prop_geo_p, eval, left=T,largest=T) %>%
          year=ANNEE_CONSTRUCTION) %>% 
  mutate(price_sqft=price/area_interior)
 
-# load definition of neigbourhoods
-mtl_p<-geojson_sf('quartierreferencehabitation.geojson') %>% 
-  mutate(nom_arr=if_else(is.na(nom_arr),nom_mun,nom_arr)) %>% 
-  mutate(nom_qr=if_else(is.na(nom_qr),nom_arr,nom_qr)) %>%
-  st_transform(32188) %>% st_buffer(dist=0)
 
-# aggregate across QR
-mtl_pa<-mtl_p%>%group_by(nom_arr)%>%summarize() 
 
 # focus on some neighborhood
 ROI_p<-mtl_p %>% filter( nom_arr %in% 
