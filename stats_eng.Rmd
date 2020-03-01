@@ -137,10 +137,10 @@ if(file.exists("osm_neighbourhood.RDS")){
   saveRDS(osm_neighbourhood, file = "osm_neighbourhood.RDS")
 }
 
-# create subset of data
+# create subset of data, remove my own appartment that went on sale in the end of range
 neighbors<-prop_geo_p %>% 
-  filter(type=='Apartment', mprice>0, bedrooms %in% c(1,2,3,4), area_interior<10000, area_interior>0) %>% 
-  st_join(neighbourhood, left=F) %>% 
+  filter(type=='Apartment', mprice>0, bedrooms %in% c(1,2,3,4), area_interior<10000, area_interior>0, mls!=24027833) %>% 
+  st_join(neighbourhood, left=F ) %>% 
   mutate(bedrooms=droplevels(bedrooms), parking=as.factor(parking>0))
 
 tm_shape(osm_neighbourhood) + tm_rgb(alpha=0.7)+

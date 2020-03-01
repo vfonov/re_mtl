@@ -280,21 +280,21 @@ ggplot(neighbors_, aes(y=price, x=area_interior, col=parking))+
 ## 
 ## Residuals:
 ##     Min      1Q  Median      3Q     Max 
-## -368568  -64535   -9112   56268  691719 
+## -368614  -64598   -8903   56357  691664 
 ## 
 ## Coefficients:
 ##                            Estimate Std. Error t value Pr(&gt;|t|)    
-## (Intercept)                41861.30   22421.28   1.867   0.0628 .  
-## parkingFALSE:area_interior   436.65      23.56  18.530   &lt;2e-16 ***
-## parkingTRUE:area_interior    511.95      19.40  26.393   &lt;2e-16 ***
+## (Intercept)                42089.57   22506.85    1.87   0.0624 .  
+## parkingFALSE:area_interior   436.43      23.64   18.46   &lt;2e-16 ***
+## parkingTRUE:area_interior    511.83      19.44   26.33   &lt;2e-16 ***
 ## ---
 ## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
 ## 
-## Residual standard error: 129400 on 312 degrees of freedom
-## Multiple R-squared:  0.6974, Adjusted R-squared:  0.6955 
-## F-statistic: 359.6 on 2 and 312 DF,  p-value: &lt; 2.2e-16</code></pre>
+## Residual standard error: 129600 on 311 degrees of freedom
+## Multiple R-squared:  0.6972, Adjusted R-squared:  0.6952 
+## F-statistic:   358 on 2 and 311 DF,  p-value: &lt; 2.2e-16</code></pre>
 <p>So, in my neighborhood every square foot in a condo without parking adds 437$ to the base price of 42k$ , and with parking it is 512$ per square foot. And now I can make a prediction of the price:</p>
-<pre><code>## Prediction:443227 [421633, 464820]</code></pre>
+<pre><code>## Prediction:443364 [421661, 465067]</code></pre>
 <p>However, if I look at the difference between what my model predicts for all the condos in the neighborhood and the prices, I can see that error depends on the predicted value:</p>
 <p><img src="stats_eng_files/figure-html/neighborhood_lm_resid-1.svg" /><!-- --></p>
 <p>Therefore violating one of the conditions where simple linear regression can be used. This kind of behaviour is called <a href="https://en.wikipedia.org/wiki/Overdispersion">overdispersion</a>, and there are several ways of dealing with it. In particular, I found in the literature that I should be using a <a href="https://en.wikipedia.org/wiki/Generalized_linear_model">generalized linear model</a> with <a href="https://en.wikipedia.org/wiki/Inverse_Gaussian_distribution">inverse Gaussian distribution</a> for errors and logarithmic link function.</p>
@@ -310,24 +310,24 @@ ggplot(neighbors_, aes(y=price, x=area_interior, col=parking))+
 ## 
 ## Deviance Residuals: 
 ##        Min          1Q      Median          3Q         Max  
-## -1.158e-03  -2.294e-04  -4.219e-05   1.636e-04   7.964e-04  
+## -1.158e-03  -2.298e-04  -3.705e-05   1.654e-04   7.959e-04  
 ## 
 ## Coefficients:
 ##                             Estimate Std. Error t value Pr(&gt;|t|)    
-## (Intercept)                1.230e+01  3.978e-02  309.21   &lt;2e-16 ***
-## parkingFALSE:area_interior 7.472e-04  4.479e-05   16.68   &lt;2e-16 ***
-## parkingTRUE:area_interior  8.739e-04  3.826e-05   22.84   &lt;2e-16 ***
+## (Intercept)                1.230e+01  3.992e-02  308.13   &lt;2e-16 ***
+## parkingFALSE:area_interior 7.468e-04  4.494e-05   16.62   &lt;2e-16 ***
+## parkingTRUE:area_interior  8.737e-04  3.834e-05   22.79   &lt;2e-16 ***
 ## ---
 ## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
 ## 
-## (Dispersion parameter for inverse.gaussian family taken to be 8.449695e-08)
+## (Dispersion parameter for inverse.gaussian family taken to be 8.473845e-08)
 ## 
-##     Null deviance: 8.4951e-05  on 314  degrees of freedom
-## Residual deviance: 2.6905e-05  on 312  degrees of freedom
-## AIC: 8194
+##     Null deviance: 8.4829e-05  on 313  degrees of freedom
+## Residual deviance: 2.6903e-05  on 311  degrees of freedom
+## AIC: 8169.6
 ## 
 ## Number of Fisher Scoring iterations: 4</code></pre>
-<pre><code>## Prediction:436436 [421530, 451870]</code></pre>
+<pre><code>## Prediction:436543 [421551, 452069]</code></pre>
 <p>Note that I am ignoring number of rooms, floor of the building and the location of the condo for simplicity. It is possible to plug them all in into the regression, but it will increase number of parameters and make modelling results more difficult to interpret. Also, many parameters are correlated, for example bigger apartments tend to have more rooms and there a more of them with parking.</p>
 <p>Now, for the sake of simplicity of comparing different properties, I could estimate price per square foot, and how it is affected by different factors.</p>
 <p>Again, using <em>generalized linear model</em> with <em>inverse Gaussian</em> distribution and <em>log</em> link:</p>
@@ -342,32 +342,32 @@ ggplot(neighbors_, aes(y=price, x=area_interior, col=parking))+
 ## 
 ## Deviance Residuals: 
 ##       Min         1Q     Median         3Q        Max  
-## -0.026470  -0.006677  -0.000959   0.004899   0.031948  
+## -0.026472  -0.006691  -0.000979   0.004897   0.031952  
 ## 
 ## Coefficients:
 ##             Estimate Std. Error t value Pr(&gt;|t|)    
-## (Intercept)  6.21817    0.02787 223.151  &lt; 2e-16 ***
-## parkingTRUE  0.11468    0.02399   4.781  2.7e-06 ***
-## bedrooms2   -0.02329    0.02940  -0.792  0.42902    
-## bedrooms3   -0.01827    0.03872  -0.472  0.63740    
-## bedrooms4   -0.18039    0.06708  -2.689  0.00755 ** 
+## (Intercept)  6.21811    0.02792 222.734  &lt; 2e-16 ***
+## parkingTRUE  0.11479    0.02406   4.771 2.83e-06 ***
+## bedrooms2   -0.02319    0.02947  -0.787  0.43205    
+## bedrooms3   -0.01827    0.03878  -0.471  0.63791    
+## bedrooms4   -0.18039    0.06718  -2.685  0.00764 ** 
 ## ---
 ## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
 ## 
-## (Dispersion parameter for inverse.gaussian family taken to be 8.676573e-05)
+## (Dispersion parameter for inverse.gaussian family taken to be 8.703344e-05)
 ## 
-##     Null deviance: 0.028922  on 314  degrees of freedom
-## Residual deviance: 0.026353  on 310  degrees of freedom
-## AIC: 3841.9
+##     Null deviance: 0.028920  on 313  degrees of freedom
+## Residual deviance: 0.026353  on 309  degrees of freedom
+## AIC: 3830.6
 ## 
 ## Number of Fisher Scoring iterations: 4</code></pre>
 <p>It’s easy to make sense of the regression results:</p>
 <pre class="r"><code>print(exp(model_psqft$coeff))</code></pre>
 <pre><code>## (Intercept) parkingTRUE   bedrooms2   bedrooms3   bedrooms4 
-## 501.7826165   1.1215192   0.9769839   0.9818974   0.8349424</code></pre>
+## 501.7540495   1.1216390   0.9770785   0.9818967   0.8349472</code></pre>
 <p>So, the square foot is worth 501$, parking adds 12% , two bedrooms reduce price by 2.4%, three bedrooms by 1.2%, four bedrooms 17% (given the same total price).</p>
 <p>The predicted price of my condo is :</p>
-<pre><code>## 431048 [414196, 448586]</code></pre>
+<pre><code>## 431111 [414161, 448756]</code></pre>
 </div>
 <div id="longitudinal-condo-price-model" class="section level3">
 <h3>Longitudinal condo price model</h3>
@@ -398,26 +398,26 @@ model_psqft_t &lt;- gam(price_sqft ~ bedrooms + parking + s(start_date, k=24) ,
 ## 
 ## Parametric coefficients:
 ##             Estimate Std. Error t value Pr(&gt;|t|)    
-## (Intercept)  6.21939    0.02742 226.846  &lt; 2e-16 ***
-## bedrooms2   -0.03086    0.02892  -1.067  0.28684    
-## bedrooms3   -0.02861    0.03814  -0.750  0.45379    
-## bedrooms4   -0.17650    0.06662  -2.649  0.00848 ** 
-## parkingTRUE  0.12152    0.02360   5.148 4.69e-07 ***
+## (Intercept)  6.21894    0.02745 226.577  &lt; 2e-16 ***
+## bedrooms2   -0.03050    0.02897  -1.053  0.29320    
+## bedrooms3   -0.02880    0.03818  -0.754  0.45119    
+## bedrooms4   -0.17663    0.06670  -2.648  0.00851 ** 
+## parkingTRUE  0.12212    0.02367   5.158 4.48e-07 ***
 ## ---
 ## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
 ## 
 ## Approximate significance of smooth terms:
 ##                 edf Ref.df     F p-value   
-## s(start_date) 1.916  2.386 4.848 0.00769 **
+## s(start_date) 1.927    2.4 4.894 0.00724 **
 ## ---
 ## Signif. codes:  0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1 &#39; &#39; 1
 ## 
-## R-sq.(adj) =  0.103   Deviance explained = 12.5%
-## -REML = 1926.7  Scale est. = 8.3645e-05  n = 315</code></pre>
+## R-sq.(adj) =  0.104   Deviance explained = 12.5%
+## -REML = 1920.9  Scale est. = 8.381e-05  n = 314</code></pre>
 <p>It still looks like the prices are going up.</p>
 <p><img src="stats_eng_files/figure-html/neighborhood_lng_gam2-1.svg" /><!-- --></p>
 <p>Using this model, the prediction of the price is</p>
-<pre><code>## 466689 [434863, 500845]</code></pre>
+<pre><code>## 467742 [435384, 502505]</code></pre>
 </div>
 <div id="how-long-would-it-take-to-sell" class="section level3">
 <h3>How long would it take to sell</h3>
