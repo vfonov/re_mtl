@@ -1,0 +1,877 @@
+---
+title: "Using Data Science for house hunting in Montreal"
+output:
+  html_document:
+    toc: true
+    theme: united
+    self_contained: false
+    dev: svg
+---
+```{r global_options,include=FALSE,echo=FALSE}
+library(knitr)
+#http://zevross.com/blog/2017/06/19/tips-and-tricks-for-working-with-images-and-figures-in-r-markdown-documents/
+#knit_hooks$set(optipng = hook_optipng)
+#knit_hooks$set(pngquant = hook_pngquant)
+knitr::opts_chunk$set(warning=FALSE, message=FALSE)
+knitr::opts_chunk$set(dpi=96, fig.retina=1, fig.height=7, fig.width=10) # , pngquant='--speed=1', optipng = '-o7'
+```
+
+# Introduction
+
+I happen to live in Montreal, in my condo on the edge of McGill Ghetto. Close to Saint Laurent Boulevard, or the Maine as locals call it, with all it's attractions - bars, restaurants, night clubs, drunken students.  And once upon a time, on a particular lively night, listening to the sounds of McGill frosh students  drunkenly heading home after hard night of studying. I thought, that it might be a good idea to move into my own house, a little bit further away from the action.
+
+![Image](https://lh3.googleusercontent.com/dbTAfxtkpQMpoc127V6IfwqL65jrEVIJ46fxgU5cYDE5cBiEqJG1mA3Ovzg9X8D-m6ZXhjPNLyr1AJZvWtgOiCJd_UME4K0kM48MbDM5k2VqHoScIk8VWbqkLRykPKa83gaqeDnQiA7_pB4Jo4gNQLLmdDJBIXeYuD21h1A_w5NiPukzswyuHx1Xlx9hE20klXeWTL36fyzU7mOMoVFaU8Hf8L4ugkx5bIZ0JsN0GMfOnw7-ZfkpC7ZyrR3tlgiTgvU1flxeBBgme31GMfHFGjnRxQq5HqmaKY29sE7UlY71d0sGB3f_mrQiDzbQw6PwC4n0-BdvHTWsHjQH3-Q0RXxdF7_ChJMujr0fAVSwCj5CO96sZKIsd1lLtNGvYV2E1KaeUDRRP3dz126nhUF2AoiG8EWwW7X9JkfJV8aRNbnJE6B1wlTSSPS2CCpztObH_-l0UpFiiwoEHlo_1NgXW9Z4OWUeq7UkKmOYQelm2RKmHffIDUFVbwUw_QXGcqu9Ep31tpEgjD7GA-oBkO9JJXyhG_rAUVmUYFiBEXr8CamJvtRDMnK_fok2nKAEuETuLyYE-4w5TwfkWvNIucm7Ya01LLoAqH333VoPloiY2vNrKA0Dmton9A7nT7b5WTQJH1EpsiycnpJS5zBXRS8BOzJeCtWay6vRxET04kjS2H48CX1d7GMG=w724-h543-no)
+
+
+It was not my first rodeo, buying a real estate in Montreal, but first time buying a house. So, I decided to do a little bit of research, before trusting my money to a real estate agent. I quickly realized that I can't afford a house anywhere close to the subway station on the Island, but I could possible afford a duplex or a triplex, where tenants would be covering part of my mortgage. 
+The solution to this problem depends not only on the price of the house, but also on the rent or potential rent that the tenants could be paying. 
+
+So, being a visual person with background in research, I wanted to see a visual map of how much things cost 
+around the island , and how much revenue I could get. In the States, and even in Ontario there are services like Zillow that can show some of the information, 
+but for Montreal I couldn't find anything, apart from the realtor association [APCIQ](https://apciq.ca/en/real-estate-market/). Maybe my preference of using English language is to blame. 
+
+So, after a few weeks of studying realtor.ca and kijiji, I wrote a python script to scrape information from them, 
+using some resources I found on github: https://github.com/Froren/realtorca . Also, city of Montreal have an open 
+data web site, that helps to fill-out some blanks. 
+
+After the data is collected by webscrappers it is processed in R, using [tidy-verse](https://www.tidyverse.org/), 
+[Simple Features for R](https://r-spatial.github.io/sf/index.html). I found excellent resources on how to 
+process geospatial information in R: [Geocomputation with R](https://geocompr.robinlovelace.net), I used [ggplot2](https://ggplot2.tidyverse.org/) 
+to make graphs and  [thematic maps](https://github.com/mtennekes/tmap) for map making. 
+
+Now I have more then a year worth of data to study. 
+
+# Data preprocessing
+
+I preprocess the data by converting it into simple-features format first, and then changing the 
+[geographic coordinate reference system (longitude and latitude)](https://spatialreference.org/ref/epsg/wgs-84/) 
+to [North American projection for Quebec and Ontario](https://spatialreference.org/ref/epsg/nad83-mtm-zone-8/)
+
+```{r preprocess_brief, eval=F,echo=T}
+library(tidyverse)
+library(sf)
+
+property<-read_csv("....") %>% 
+ st_as_sf(coords=c("lng","lat"), crs=4326) %>% 
+ st_transform(crs=32188)
+```
+
+```{r setup, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
+# first we setup packages needed
+library(tidyverse)
+# simple features for geographic data
+library(sf)
+
+# thematic maps and additional tools
+library(tmap)
+library(tmaptools)
+
+# GAM modelling
+library(mgcv)
+# raster operations
+library(raster)
+# geo-spatial data from open street maps
+library(osmdata)
+
+# for survival analysis
+library(survival)
+library(survminer)
+
+# physical units (disances, areas)
+library(units)
+
+# working with time
+library(lubridate)
+
+# additional statistical methods
+library(MASS)
+
+# default ggplot2 theme
+theme_set(theme_bw(base_size = 14, base_family = "Arial")+
+  theme(
+        axis.text   = element_text(vjust = 0.2, size = 12),
+        axis.title = element_text(face = 'bold', vjust = 0.2, size = 20),
+        plot.title = element_text(face = 'bold', vjust = 2.0, size = 20),
+        strip.text = element_text(face = 'bold', size = 12),
+        plot.margin = unit(c(1.0,0.2,0.2,0.2), "cm"),
+        legend.position='bottom'
+    ))
+
+# data is preprocessed by another script and stored for analysis
+load('preprocessed.RData')
+
+# work location
+ref_work<-data.frame(latitude=45.530657, 
+                     longitude=-73.613654)%>%
+  st_as_sf(coords=c('longitude','latitude'),crs=4326) %>% 
+  st_transform(crs=32188, check=T, partial=F)  
+
+# standard tmap features
+tmap_std<-tm_compass(position=c("right", "bottom"))+
+  tm_scale_bar(position=c("left", "bottom"))+
+  tm_layout(scale=1.5)
+```
+
+# Condo price
+
+First I wanted to evaluate how much I could get for my condo. I need to define my neighborhood
+and find all the condos for sale around me. 
+
+## Neighborhood map
+```{r neighborhood, eval=TRUE, echo=FALSE, message=FALSE,  error=F}
+# The plateau of Montreal
+plateau<-mtl_p%>%filter(nom_arr=='Le Plateau-Mont-Royal')%>%st_buffer(dist=0)
+
+# I live on the border of two neighborhoods
+neighbourhood<-mtl_p%>%filter(nom_qr %in% c("Saint-Louis", "Milton-Parc"))%>%summarize()
+
+# I need to show a pretty map to see what's where
+# but i don't want to hit open street map servers every time
+# i am updating my graphs
+if(file.exists("osm_neighbourhood.RDS")){
+  osm_neighbourhood<-readRDS(file="osm_neighbourhood.RDS")
+} else {
+  # osm understands information in 4326 projection
+  osm_neighbourhood<-read_osm(st_bbox(neighbourhood%>%st_transform(4326)), type="esri")
+  # save to file to speedup runs
+  saveRDS(osm_neighbourhood, file = "osm_neighbourhood.RDS")
+}
+
+# create subset of data
+neighbors<-prop_geo_p %>% 
+  filter(type=='Apartment', mprice>0, bedrooms %in% c(1,2,3,4), area_interior<10000, area_interior>0) %>% 
+  st_join(neighbourhood, left=F) %>% 
+  mutate(bedrooms=droplevels(bedrooms), parking=as.factor(parking>0))
+
+tm_shape(osm_neighbourhood) + tm_rgb(alpha=0.7)+
+  tm_shape(neighbourhood) + tm_borders(col='red',alpha=0.8)  + 
+  tm_shape(neighbors) + tm_symbols(shape=3,size=0.2,alpha=0.8) +
+  tm_shape(ref_home) + tm_symbols(col='red',shape=4,size=0.5,alpha=0.8) +
+  tmap_std
+```
+
+## Neighbourhood condo prices
+
+Now I can show the prices, and see how the depend on condo surface area and if there is a parking lot. 
+And If i use a simple linear regression I can get the first approximation of what my condo might be
+worth.
+
+```{r neighborhood_lm1, eval=TRUE, echo=TRUE, message=FALSE,  error=F}
+# convert spatial object into a simple data frame with x and y 
+neighbors_<-bind_cols(as.data.frame(neighbors),
+          as.data.frame(st_coordinates(neighbors)))%>%rename(x=X,y=Y) 
+  
+ggplot(neighbors_, aes(y=price, x=area_interior, col=parking))+
+  geom_point(alpha=0.7,size=2)+
+  scale_y_continuous( labels = scales::dollar)+
+  geom_smooth(method='lm')+
+  geom_vline(data=ref_home, aes(xintercept=area_interior),col='black',lty=2)+
+  coord_cartesian(xlim=c(400,2000),ylim=c(2e5,1e6))+
+  ylab('Price')+xlab('Surface sqft')
+```
+
+Мore formally I can use linear model to predict price and confidence intervals 
+
+### linear model
+```{r neighborhood_lm2, eval=T, echo=F }
+# simple regression model
+model_price_lm <- lm(mprice ~ parking:area_interior , data=neighbors_)
+
+print(summary(model_price_lm))
+```
+So, in my neighborhood every square foot in a condo without parking adds 437$ to the base price of 42k$ ,
+and with parking it is 512$ per square foot. And now I can make a prediction of the price:
+
+```{r eval=T,echo=F,message=T}
+# predict price and standard error
+result_lm<-predict(model_price_lm, ref_home, se.fit=T)
+
+pretty_predict<-function(res) sprintf("Prediction:%.0f [%.0f, %.0f]\n",
+  res$fit, res$fit-2*res$se.fit, res$fit+2*res$se.fit)
+
+cat(pretty_predict(result_lm))
+```
+
+However, if I look at the difference between what my model predicts for all the condos in the neighborhood
+and the prices, I can see that error depends on the predicted value:
+
+```{r neighborhood_lm_resid, eval=TRUE, echo=F, message=FALSE,  error=F}
+neighbors_$fit<- predict(model_price_lm)
+neighbors_$res <- neighbors_$mprice-neighbors_$fit
+
+ggplot(neighbors_, aes(x=fit, y=res) ) +
+  geom_point(alpha=0.7,size=2)+
+  scale_y_continuous(labels = scales::dollar )+
+  scale_x_continuous(labels = scales::dollar )+
+  xlab('predicted')+ylab('residuals')
+```
+
+Therefore violating one of the conditions where simple linear regression can be used. This kind of 
+behaviour is called [overdispersion](https://en.wikipedia.org/wiki/Overdispersion), and there are several 
+ways of dealing with it. In particular, I found in the literature that I should be using a [generalized linear model](https://en.wikipedia.org/wiki/Generalized_linear_model)
+with [inverse Gaussian distribution](https://en.wikipedia.org/wiki/Inverse_Gaussian_distribution) for errors and logarithmic link function. 
+
+
+### generalized linear model
+```{r neighborhood_glm1, eval=T, echo=F, message=F,  error=F}
+ggplot(neighbors_, aes(y=price, x=area_interior, col=parking))+
+  geom_point(alpha=0.7,size=2)+
+  scale_y_continuous( labels = scales::dollar)+
+  geom_smooth(method='glm',method.args=list(family = inverse.gaussian(link="log")))+
+  geom_vline(data=ref_home, aes(xintercept=area_interior),col='black',lty=2)+
+  coord_cartesian(xlim=c(400,2000),ylim=c(2e5,1e6))+
+  ylab('Price')+xlab('Surface sqft')
+```
+
+The estimate using generalized linear model is following:
+```{r neighborhood_glm2, echo=F, eval=T, fig.height=7, fig.width=10}
+fam=inverse.gaussian(link="log")
+ilink<-fam$linkinv
+
+model_price_glm <- glm(mprice ~ parking:area_interior , data=neighbors_, 
+                       family=inverse.gaussian(link="log"))
+
+print(summary(model_price_glm))
+# predict price
+predict_home <- predict(model_price_glm, ref_home, se.fit=T)
+
+pretty_predict_glm <- function(x) 
+  sprintf("Prediction:%.0f [%.0f, %.0f]\n",
+    ilink( x$fit ),
+    ilink( x$fit-2*x$se.fit ),
+    ilink( x$fit+2*x$se.fit ))
+```
+
+```{r echo=F, eval=T}
+cat(pretty_predict_glm(predict_home))
+```
+
+Note that I am ignoring number of rooms, floor of the building and the location of the condo for simplicity. It is possible to plug them all in into the regression, but it will increase number of parameters and make  modelling results more difficult to interpret. Also, many parameters are correlated, for example bigger apartments tend to have more rooms and there a more of them with parking.
+
+Now, for the sake of simplicity of comparing different properties, I could estimate price per square foot, and how  it is affected by different factors.
+
+Again, using *generalized linear model* with *inverse Gaussian* distribution and *log* link:
+
+### price per square foot
+```{r neighborhood_sqft_price, eval=T, echo=F, message=F,  error=F}
+
+ggplot(neighbors_, aes(y=price_sqft,x=parking, col=parking))+
+  geom_point(alpha=0.7,size=2,pos='jitter')+
+  geom_boxplot(alpha=0.5,size=0.5)+
+  facet_wrap(~bedrooms,labeller = label_both)+
+  scale_y_continuous( labels = scales::dollar)+
+  ylab('Price/sqft')+xlab('')
+
+model_psqft <- glm(price_sqft ~ parking + bedrooms, data=neighbors_, family=fam)
+
+print(summary(model_psqft))
+```
+
+It's easy to make sense of the regression results:
+```{r eval=TRUE, echo=T}
+print(exp(model_psqft$coeff))
+```
+So, the square foot is worth 501$, parking adds 12% , two bedrooms reduce price by 2.4%, three bedrooms by 1.2%, four bedrooms 17% (given the same total price).
+
+The predicted price of my condo is :
+```{r eval=TRUE,echo=FALSE}
+# predict price
+predict_home_sqft<-predict(model_psqft, ref_home, se.fit=T)
+
+cat(sprintf("%.0f [%.0f, %.0f]\n",ilink(predict_home_sqft$fit)*ref_home$area_interior,
+    ilink(predict_home_sqft$fit-2*predict_home_sqft$se.fit)*ref_home$area_interior,
+    ilink(predict_home_sqft$fit+2*predict_home_sqft$se.fit)*ref_home$area_interior))
+```
+
+### Longitudinal condo price model
+
+All my previous models are showing results based on the condos on the market during the last year, without
+trying to account for the price change. It would have been interesting, how the price change with time. 
+I have no idea how prices should behave, there is no reason to think that there is a steady linear trend, considering
+seasonal rise and fall in prices, so first, I could just smooth the data using [loess](https://en.wikipedia.org/wiki/Local_regression) function.
+
+#### Loess smoothing
+
+If I pile all the data together:
+
+```{r neighborhood_lng_loess1, eval=TRUE, echo=FALSE, message=FALSE}
+ggplot(neighbors_ %>% filter(bedrooms %in% c(1,2,3) ),aes(x=first_ts, y=price_sqft))+
+  geom_point()+
+  geom_smooth(method='loess')+
+  ylab('Price/sqft')+
+  xlab('Date')+
+  theme(axis.text.x=element_text(angle=60, hjust=1, size=12) )
+```
+
+
+But if I try to separate by number of bedrooms, the results are kind of random, since the data
+might be too sparse.
+
+```{r neighborhood_lng_loess2, eval=TRUE, echo=FALSE, message=FALSE}
+ggplot(neighbors_%>% filter(bedrooms %in% c(1,2,3)),aes(x=first_ts, colour=parking, y=price_sqft))+
+  facet_grid(~bedrooms,labeller = label_context)+
+  geom_point()+
+  geom_smooth(method='loess')+
+  ylab('Price/sqft')+
+  xlab('Date')+
+  theme(axis.text.x=element_text(angle=60, hjust=1, size=12) )
+```
+
+So, it seems that I would rather want to have an overall smooth variation in price, while taking into account 
+some features of the condos: i.e there is actually no reason to think that two bedroom condos are gaining in value 
+slower then three bedroom ones. But there is variation of the proportion of different appartments with time, 
+which would bias the results. 
+
+So, I am going to use [generalized additive models](https://en.wikipedia.org/wiki/Generalized_additive_model) where 
+I can model overall change of price using a smooth function, while taking into account difference between 
+different kinds of condos.
+
+### Longitudinal condo price model:GAM model
+```{r neighborhood_lng_gam1, eval=T, echo=T, message=F}
+
+# price model with time
+# k=24, but k=100 produces almost exactly the same result
+model_psqft_t <- gam(price_sqft ~ bedrooms + parking + s(start_date, k=24) ,
+          data=neighbors_, bs="cr",method='REML',
+          family=inverse.gaussian(link="log"))
+```
+```{r eval=T, echo=F, message=F}
+print(summary(model_psqft_t))
+```
+
+It still looks like the prices are going up.
+
+```{r neighborhood_lng_gam2, eval=TRUE, echo=FALSE, message=FALSE,  error=F}
+# showing fit
+simul <- expand.grid(bedrooms=c(2), 
+      parking=c(T),
+      first_ts=seq(min(neighbors_$first_ts), max(neighbors_$first_ts),by='day'))%>%
+  mutate(start_date=as.numeric(first_ts))
+
+res <- predict(model_psqft_t, newdata=simul, se.fit=T)
+simul$price_sqft <- ilink(res$fit)
+simul$price_sqft_upr <- ilink(res$fit+2*res$se.fit)
+simul$price_sqft_lwr <- ilink(res$fit-2*res$se.fit)
+
+ggplot(simul,aes(x=first_ts, colour=parking, y=price_sqft))+
+  geom_ribbon(alpha=0.1,lty=2,aes(ymin=price_sqft_lwr, ymax=price_sqft_upr))+
+  geom_line()+
+  geom_point(data=neighbors_%>% filter(bedrooms %in% c(1,2,3)), aes(x=first_ts,colour=parking, y=price_sqft, shape=bedrooms))+
+  ylab('Price/sqft')+
+  xlab('Date')+
+  theme(
+        axis.text.x=element_text(angle=60, hjust=1, size=12)
+    )
+```
+
+Using this model, the prediction of the price is
+```{r neighborhood_lng_gam_pred, eval=TRUE, echo=FALSE, message=FALSE}
+# predict for the latest time
+
+ref_home$first_ts<-max(neighbors_$first_ts)
+ref_home$start_date<-as.numeric(ref_home$first_ts)
+predict_home_t<-predict(model_psqft_t, ref_home, se.fit=T)
+
+cat(sprintf("%.0f [%.0f, %.0f]\n",
+     ilink(predict_home_t$fit)*ref_home$area_interior,
+     ilink(predict_home_t$fit-2*predict_home_t$se.fit)*ref_home$area_interior,
+     ilink(predict_home_t$fit+2*predict_home_t$se.fit)*ref_home$area_interior ))
+```
+
+### How long would it take to sell
+Another important question - how long would it take to sell? For this one can use
+[survival analysis](https://en.wikipedia.org/wiki/Survival_analysis)
+Technically, it looks like some types of condos sell faster then others, but the difference is not big.
+It looks like half of  the condos disappear from the market within 60 days :
+
+```{r neighborhood_surv_graph, eval=TRUE, echo=TRUE, fig.height=7, fig.width=10}
+surv_type<-survfit(Surv(time_on_market, !active) ~ 1, neighbors_)
+
+p<-ggsurvplot( surv_type, data=neighbors_, conf.int = TRUE,
+    conf.int.style ='step', censor=F, surv.scale='percent',
+    break.time.by=30,surv.median.line='hv',
+    xlim=c(0.0,365.0))
+p$plot <- p$plot + theme(legend.text = element_text(size = 5, color = "black", face = "bold"))
+p
+```
+
+# Plex price estimate
+Similarly, when I am looking at the potential plex I would like to know how much houses cost in the neighborhood.
+Let's say within 2km radius of the plex I was interested at some point:
+
+```{r eval=T,echo=T,message=F }
+selected_mls=17758383
+max_distance=2000# 2km
+
+plex_pe<-prop_geo_p %>% filter(type!='Apartment', type!='House') %>% 
+  mutate(parking=as.factor(parking>0), 
+  stories=as.factor(stories),type=as.factor(type))
+
+selected<-plex_pe %>% filter(mls==selected_mls) %>% rename(mls_ref=mls)
+
+# create a circle around the reference
+search_roi <- st_buffer(selected, max_distance)
+
+# remove some noise entries
+result <- st_intersection(plex_pe %>% filter(mls!=selected_mls), search_roi) %>% 
+  filter(area_interior<10000, area_interior>100,area_land>0,price<1e7,price>100 ) 
+```
+
+```{r plex_prices1,eval=T,echo=F,message=F }
+# selected plex
+print(selected%>%as.data.frame()%>%dplyr::select(mls_ref,area_interior,area_land,type,bedrooms,parking,first_ts))
+
+if(file.exists("osm_result.RDS")){
+  osm_result<-readRDS(file="osm_result.RDS")
+} else {
+  # osm understands information in 4326 projection
+  osm_result <- read_osm(st_bbox(st_transform(search_roi, 4326 )), ext=1.5, type="esri")
+  # save to file to speedup runs
+  saveRDS(osm_result, file = "osm_result.RDS")
+}
+```
+```{r plex_map, eval=T, echo=F, fig.height=7, fig.width=10}
+tm_shape(osm_result)+tm_rgb(alpha=0.8)+
+  tm_shape(selected)+tm_symbols(shape=4,col="red",size=2,alpha=0.9)+
+  tm_shape(result)+tm_symbols(shape=3,col="black",alpha=0.7,size=0.5)+
+  tm_shape(search_roi)+tm_borders(col="black",lwd=2,alpha=0.3)+
+  tmap_std
+```
+
+The price distribution is
+```{r plex_prices2, eval=T,echo=F,fig.height=7, fig.width=10}
+ggplot(result%>%as.data.frame(), aes(x=area_interior, y=price, col=type))+
+   geom_point(alpha=0.7)+
+   geom_point(data=selected%>%as.data.frame(), aes(x=area_interior, y=price) , size=10, shape='+', alpha=0.9, col='black') +
+   scale_y_continuous(labels = scales::dollar )+xlim(c(0,5000))+
+   geom_smooth(method='glm',method.args=list(family = inverse.gaussian(link="log")))
+```
+
+Here i can see that the seller is asking slightly more then what is the average for neighborhood, but
+at the same time the variability is quite high. For plexes many more parameters are important then 
+for condos, like the size of the backyard, which year the building was built and how much
+existing tennants are paying.
+
+Using similar GLM model as for condos, the estimate for the price is the following:
+
+### per sqft price regression model
+```{r plex_sqft_glm,echo=F,eval=T}
+m_plex <- glm(price_sqft ~ type+bedrooms+parking, data=result%>%as.data.frame(), family=fam)
+
+print(summary(m_plex))
+
+# # predict price
+predict_selected<-predict(m_plex, selected%>%as.data.frame(), se.fit=T)
+
+cat(sprintf("Prediction: %.0f [%.0f, %.0f]\n",
+     ilink(predict_selected$fit)*selected$area_interior,
+     ilink(predict_selected$fit-2*predict_selected$se.fit)*selected$area_interior,
+     ilink(predict_selected$fit+2*predict_selected$se.fit)*selected$area_interior ))
+```
+
+To estimate the rentals prices in the neighborhood I can find all the appartments 
+listed on Kijiji during last year close by.
+```{r plex_rentals_map,eval=T,echo=F,fig.height=7, fig.width=10}
+result_kijiji<-st_intersection(kijiji_geo_p,search_roi)%>%mutate(bedrooms=as.factor(bedrooms))
+
+tm_shape(osm_result)+tm_rgb(alpha=0.8)+
+  tm_shape(selected)+tm_symbols(shape=4,col="red",size=2,alpha=0.9)+
+  tm_shape(result_kijiji)+tm_symbols(shape=3, col="black", alpha=0.3,size=0.5)+
+  tm_shape(search_roi)+tm_borders(col="black",lwd=2,alpha=0.3)+
+  tmap_std
+```
+
+The price distribution gives me idea how much I could be potentially
+getting from the tennants. Of course there might be existing tenants already, so it
+would show me if what they are paying is close to what's currently on the market.
+```{r plex_rentals_boxplot,eval=T,echo=F,fig.height=7, fig.width=10}
+ggplot(result_kijiji%>%as.data.frame(),aes(x=bedrooms,y=price))+
+  geom_boxplot()
+```
+
+# Spatial prices
+## Spatial statistics: rent of 4 1/2
+### Average over neighborhood
+
+Remember, my original question was to see the map of the prices in Montreal. The simplest would be
+to calculate median rental prices per neighborhood and show it on the map, like following:
+```{r rent_quartier1, eval=TRUE, echo=TRUE}
+# summarize by neighorhoods, only keeping 2 bedroom
+rent_by_quartier<-aggregate( kijiji_geo_p%>%filter(bedrooms==2) %>% dplyr::select(price),
+    mtl_p,median,join = st_contains) 
+```
+
+```{r rent_quartier1_map, eval=T, echo=F}
+# extract borders of districts
+mtl_arr<-mtl_p%>%group_by(nom_arr)%>%summarize()
+
+if(file.exists("osm_mtl.RDS")){
+  osm_mtl<-readRDS(file="osm_mtl.RDS")
+} else {
+  osm_mtl<-read_osm(st_bbox(mtl_p%>%st_transform(4326)), type="esri",ext=1.5) # ext=1.5,
+  # save to file to speedup runs
+  saveRDS(osm_mtl, file = "osm_mtl.RDS")
+}
+
+# map the whole island
+tm_shape(osm_mtl)+tm_rgb(alpha=0.6)+
+  tm_shape(mtl_arr) + tm_borders(alpha=0.7,col='black')+
+  tm_shape(rent_by_quartier) + tm_fill(col='price',alpha=0.8,breaks=seq(400,2000,by=200),title='$')+
+  tm_shape(ref_home) + tm_symbols(col='red',shape=4,size=0.5,alpha=0.8)+
+  tm_legend(position = c("left", "top"), 
+            frame = TRUE, outside = FALSE,
+            bg.color="white")+
+  tmap_std
+```
+
+Since I am not actually looking everywhere on the island, here is the central part. Blue cross is where I go
+for work.
+```{r rent_quartier_roi_map, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
+# my region of interest, for tracking plex
+ROI_p<-mtl_p %>% filter( nom_arr %in% 
+  c('Le Plateau-Mont-Royal',
+    'Villeray–Saint-Michel–Parc-Extension',
+    'Rosemont–La Petite-Patrie',
+    "Ahuntsic-Cartierville",
+    "Outremont",
+    "Ville-Marie",
+    "Le Sud-Ouest",
+    "Côte-des-Neiges–Notre-Dame-de-Grâce","Verdun","Westmount","Hampstead","Côte-Saint-Luc","Saint-Laurent","Mont-Royal"
+    ) ) %>% st_intersection(st_geometry(mtl_land)%>%st_buffer(0)) %>%
+   mutate( arr=factor(nom_arr, 
+    levels=c('Le Plateau-Mont-Royal',
+    'Villeray–Saint-Michel–Parc-Extension',
+    'Rosemont–La Petite-Patrie',
+    "Ahuntsic-Cartierville","Outremont", "Ville-Marie","Le Sud-Ouest",
+    "Côte-des-Neiges–Notre-Dame-de-Grâce","Verdun","Westmount","Hampstead","Côte-Saint-Luc","Saint-Laurent","Mont-Royal"),
+    labels=c('Plateau','Villeray','Rosemont','Ahuntsic',"Outremont",
+    "Ville-Marie","Sud-Ouest","CdN-NdG","Verdun","Westmount","Hampstead","Côte-Saint-Luc","Saint-Laurent","TMR"
+    )),
+     qr=as.factor(nom_qr))
+#
+if(file.exists("osm_roi.RDS")){
+  osm_roi<-readRDS(file="osm_roi.RDS")
+} else {
+  osm_roi<-read_osm(st_bbox(ROI_p%>%st_transform(4326)), type="esri") # ext=1.5,
+  # save to file to speedup runs
+  saveRDS(osm_roi, file = "osm_roi.RDS")
+}
+
+rent_by_quartier_ROI<-aggregate(filter(kijiji_geo_p,bedrooms==2)%>%dplyr::select(price),ROI_p,median,join = st_contains) 
+ROI_p_аrr<-ROI_p%>%group_by(arr)%>%summarize()%>%st_buffer(dist=0)
+# my ROI
+tm_shape(osm_roi) + tm_rgb(alpha=0.7) + 
+  tm_shape(ROI_p_аrr) + tm_borders(alpha=1.0,col='black',lwd=2)+
+  tm_shape(ROI_p_аrr%>%st_centroid()) + tm_text(text='arr',alpha=0.8,size=0.5)+
+  tm_shape(rent_by_quartier_ROI) + tm_fill(col='price',alpha=0.8,breaks=seq(400,2000,by=200),title='$')+
+  tm_shape(ref_home) + tm_symbols(col='red',shape=4,size=1.0,alpha=0.9)+
+  tm_shape(ref_work) + tm_symbols(col='blue',shape=3,size=1.0,alpha=0.9)+
+  tm_legend(position = c("left", "top"), 
+            frame = TRUE, outside = FALSE,
+            bg.color="white")+
+  tmap_std
+```
+
+This map looks interesting, but it seem unrealistic to ussume that there are going to be sharp borders on the 
+edges of neighborhoods. So, I would prefer to use a method that allows for smooth spatial change in prices. 
+I can actually again use [generalized additive models](https://en.wikipedia.org/wiki/Generalized_additive_model), 
+as for the time course estimate, but with spatial coordinates.
+
+### Rental prices spatial gam model
+```{r eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
+
+kijiji_roi<-kijiji_geo_p%>%dplyr::filter(!is.na(bedrooms))%>%st_join(mtl_land,left=F)
+```
+
+```{r eval=TRUE, echo=T, message=FALSE, warning=FALSE}
+rent<-kijiji_roi %>% mutate(bedrooms=as.factor(bedrooms))
+rent<-bind_cols( as.data.frame(rent), as.data.frame(st_coordinates(rent)))%>%rename(x=X,y=Y)
+
+# create spatical model with smooth price varaibility
+model_rent_geo_whole<-gam(price~bedrooms+s(x,y,k=100),
+        data=rent,bs="cr",method='REML',
+        family=inverse.gaussian(link="log"))
+
+print(summary(model_rent_geo_whole))
+
+# interpolate it on the raster
+pred_rent_whole <- raster(extent(mtl_land),res=100)
+crs(pred_rent_whole)<-crs(mtl_land)
+
+# need to predict response (link by default)
+my_predict<-function(...) predict(...,type="response")
+
+# predict 4 1/2 rents
+pred_rent_whole <- raster::interpolate(pred_rent_whole, model_rent_geo_whole, fun=my_predict, xyOnly=T,
+                                const=data.frame(bedrooms=2))
+
+# remove data that was extrapolated outiside of the island
+pred_rent_whole <- mask(pred_rent_whole, mtl_land)
+```
+
+```{r rent_spatial2, eval=TRUE, echo=FALSE,  message=F, error=F} 
+tm_shape(osm_mtl)+tm_rgb(alpha=0.6)+
+   tm_shape(mtl_arr) + tm_borders(alpha=0.8, col='black')+
+   tm_shape(pred_rent_whole)+tm_raster(style="cont",alpha=0.7, title='$')+
+   tm_shape(subway_stop_p%>%dplyr::select(stop_name))+tm_symbols(col='blue',alpha=0.2,size=0.03)+
+   tm_shape(subway_p)+tm_lines(col='blue',alpha=0.2)+
+  tmap_std
+```
+
+Rental prices in the central area, which is more interesting for me.
+
+```{r rent_spatial3, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
+ROI_buf<-ROI_p%>%summarize()%>%st_buffer(1000)
+
+# make a 1km buffer around ROI to avoid border effects
+kijiji_roi<-kijiji_geo_p%>%st_join(ROI_buf,left=F)
+
+rent<-kijiji_roi %>% mutate(bedrooms=as.factor(bedrooms))
+rent<-bind_cols(rent, as.data.frame(st_coordinates(rent)))%>%rename(x=X,y=Y)
+
+model_rent_geo<-gam(price~bedrooms+s(x,y,k=100),
+        data=rent,bs="cr",method='REML',
+        family=fam)
+
+pred_rent <- raster(extent(ROI_p),res=100)
+crs(pred_rent)<-crs(rent)
+
+# predict 4 1/2 rents
+pred_rent <- raster::interpolate(pred_rent,model_rent_geo,fun=my_predict, xyOnly=T,
+                                const=data.frame(bedrooms=2))
+
+pred_rent <- mask(pred_rent, ROI_p)
+
+tm_shape(osm_roi) + tm_rgb(alpha=0.7) + 
+  tm_shape(ROI_p_аrr) + tm_borders(alpha=1.0,col='black',lwd=2)+
+  tm_shape(ROI_p_аrr%>%st_centroid()) + tm_text(text='arr',alpha=0.8,size=0.5)+
+  tm_shape(pred_rent)+
+  tm_raster(style="cont", alpha=0.8, breaks=seq(400,2000,by=200),title='$')+
+  tm_shape(subway_p) + tm_lines(col='blue',lwd=3,alpha=0.2)+
+  tm_shape(subway_stop_p) + tm_symbols(col='blue',size=0.2,alpha=0.2)+
+  tm_shape(ref_home) + tm_symbols(col='red',shape=4,size=1.0,alpha=0.9)+
+  tm_shape(ref_work) + tm_symbols(col='blue',shape=3,size=1.0,alpha=0.9)+
+  tm_legend(position = c("left", "top"), 
+            frame = TRUE, outside = FALSE,
+            bg.color="white")+
+  tmap_std
+```
+
+### Plexes price spatial model
+In a same fashion, I can model distribution of the prices per square foot for triplexes with
+3br main apartment and parking.
+
+```{r plex_price_spatial1, eval=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
+# filter out Apartments and houses
+plex_geo_p <- prop_geo_p %>% 
+  dplyr::filter( type != 'Apartment', type != 'House', mprice>0, area_interior>0 ) %>%
+  mutate(type=droplevels(type), parking=parking>0) %>% 
+  st_intersection(ROI_buf) 
+
+# remove outliers (only use entries between 1st and 99th percentile)
+plex_geo_p_lim<-plex_geo_p%>%as.data.frame()%>%group_by(nom_qr,type,bedrooms)%>%
+  summarize(
+    price_low = quantile(mprice,0.01), price_high = quantile(mprice,0.99),
+    area_low = quantile(area_interior,0.01), area_high = quantile(area_interior,0.99),
+  )
+
+plex_geo_p<- plex_geo_p %>% left_join(plex_geo_p_lim, by=c('nom_qr','type','bedrooms')) %>%
+  filter(mprice<=price_high, mprice>=price_low,
+         area_interior<=area_high,area_interior>=area_low) %>% 
+  dplyr::select(-price_high,-price_low,-area_high,-area_low)
+
+plex_geo_pp <- bind_cols(as.data.frame(plex_geo_p),
+                         as.data.frame(st_coordinates(plex_geo_p)))%>%
+              rename(x=X,y=Y) 
+
+# using GAM fit a simple spatial model of price per sqft
+model_psqf_geo<-gam(price_sqft ~ type + bedrooms + parking + s(x,y, k=100),
+        data=plex_geo_pp, bs="cr",method='REML',
+        family=fam)
+print(summary(model_psqf_geo))
+
+# using GAM fit a simple spatial model of surface
+model_area_geo<-gam(area_interior ~ type + bedrooms + parking + s(x,y, k=100),
+        data=plex_geo_pp, bs="cr",method='REML',
+        family=fam)
+print(summary(model_area_geo))
+
+# fitting survival data
+#mmt<-gam(time_on_market ~ type+parking + s(x,y,k=200),
+#        data=plex_geo_pp, bs="cr",
+#        family=cox.ph(), weight=!active)
+#print(summary(mmt))
+
+pred_price_sqft<-raster(extent(ROI_p),res=100)
+crs(pred_price_sqft)<-crs(ROI_p)
+
+pred_area<-raster(extent(ROI_p),res=100)
+crs(pred_area)<-crs(ROI_p)
+
+# make another raster for rent
+pred_rent <- raster(extent(ROI_p),res=100)
+crs(pred_rent)<-crs(ROI_p)
+
+# predicting price per sqft of a triplex with 3br and parking
+pred_price_sqft<-raster::interpolate(pred_price_sqft, model_psqf_geo, fun=my_predict, xyOnly=T,
+  const=data.frame(type='Triplex',bedrooms=3, parking=T))
+
+# predict average area of a triplex with 3br and parking
+pred_area<-raster::interpolate(pred_area, model_area_geo, fun=my_predict, xyOnly=T,
+  const=data.frame(type='Triplex',bedrooms=3, parking=T))
+pred_area <- mask(pred_area, ROI_p)
+
+# predict 4 1/2 rents in the same area
+pred_rent <- raster::interpolate(pred_rent,model_rent_geo,fun=my_predict, xyOnly=T,
+                                const=data.frame(bedrooms=2, parking=F))
+pred_rent <- mask(pred_rent, ROI_p)
+
+# predict survival after 60 days
+#pred_p<-raster::interpolate(pred_r, mmt, fun=my_predict, xyOnly=T,
+#  const=data.frame(type='Triplex', bedrooms=3, parking=T, time_on_market=60 ))
+
+pred_price_sqft<- mask(pred_price_sqft, ROI_p)
+
+# profitability of a triplex : rent for the whole year for two units / total price
+pred_prof <- 2*pred_rent*12/(pred_price_sqft*pred_area)
+
+tm_shape(osm_roi) + tm_rgb(alpha=0.7) + 
+  tm_shape(pred_price_sqft)+
+  tm_raster(style="cont",alpha=0.9,title='$' )+
+  tm_legend(position = c("left", "top"), 
+            frame = TRUE,outside = FALSE,
+            bg.color="white")+
+  tm_shape(ROI_p_аrr) + tm_borders(alpha=1.0,col='black',lwd=2)+
+  tm_shape(ROI_p_аrr%>%st_centroid()) + tm_text(text='arr',alpha=0.8,size=0.5)+
+  tm_shape(subway_p) + tm_lines(col='blue',lwd=3,alpha=0.2)+
+  tm_shape(subway_stop_p) + tm_symbols(col='blue',size=0.2,alpha=0.2)+
+  tm_shape(ref_home) + tm_symbols(col='red',shape=4,size=1.0,alpha=0.9)+
+  tm_shape(ref_work) + tm_symbols(col='blue',shape=3,size=1.0,alpha=0.9)+
+ tmap_std
+```
+
+###  Surface area for a triplex with 3br and parking
+
+Now that I have spatial price distribution, I can also model surface area distribution. This,
+technically can be done using [data from the city website](http://donnees.ville.montreal.qc.ca/dataset/unites-evaluation-fonciere/resource/866a3dbc-8b59-48ff-866d-f2f9d3bbee9d).
+But for this example I am using only property that was on the market
+
+```{r plex_area_spatial3, eval=TRUE, echo=FALSE,  message=F, error=F} 
+tm_shape(osm_roi) + tm_rgb(alpha=0.7) + 
+  tm_shape(pred_area)+
+  tm_raster(style="cont",alpha=0.9,title='sqft' )+
+  tm_legend(position = c("left", "top"), 
+            frame = TRUE,outside = FALSE,
+            bg.color="white")+
+  tm_shape(ROI_p_аrr) + tm_borders(alpha=1.0,col='black',lwd=2)+
+  tm_shape(ROI_p_аrr%>%st_centroid()) + tm_text(text='arr',alpha=0.8,size=0.5)+
+  tm_shape(subway_p) + tm_lines(col='blue',lwd=3,alpha=0.2)+
+  tm_shape(subway_stop_p) + tm_symbols(col='blue',size=0.2,alpha=0.2)+
+  tm_shape(ref_home) + tm_symbols(col='red',shape=4,size=1.0,alpha=0.9)+
+  tm_shape(ref_work) + tm_symbols(col='blue',shape=3,size=1.0,alpha=0.9)+
+ tmap_std
+```
+
+### Triplex Profitability (rent per year/triplex total price)
+
+This way I can roughly estimate profitability of triplexes in different parts of town.
+By calculating a total price and dividing by the potential income of two two-bedroom
+apartments rented for the year. Of course this is very rough estimate, since 
+I am assuming that all triplexes will have two 4 1/2 apartments for rent.
+
+```{r plex_profitability_spatial,eval=TRUE, echo=FALSE,  message=F, error=F} 
+tm_shape(osm_roi) + tm_rgb(alpha=0.7) + 
+  tm_shape(pred_prof)+
+  tm_raster(style="cont",alpha=0.9, title='rent/total_price')+
+  tm_legend(position = c("left", "top"), 
+            frame = TRUE,outside = FALSE,
+            bg.color="white")+
+  tm_shape(ROI_p_аrr) + tm_borders(alpha=1.0,col='black',lwd=2)+
+  tm_shape(ROI_p_аrr%>%st_centroid()) + tm_text(text='arr',alpha=0.8,size=0.5)+
+  tm_shape(subway_p) + tm_lines(col='blue',lwd=3,alpha=0.2)+
+  tm_shape(subway_stop_p) + tm_symbols(col='blue',size=0.2,alpha=0.2)+
+  tm_shape(ref_home) + tm_symbols(col='red',shape=4,size=1.0,alpha=0.9)+
+  tm_shape(ref_work) + tm_symbols(col='blue',shape=3,size=1.0,alpha=0.9)+
+ tmap_std
+```
+
+```{r eval=TRUE, echo=FALSE,  message=F, error=F} 
+if(F){
+## Spatial survival model
+tm_shape(osm_roi) + tm_rgb(alpha=0.7) + 
+  tm_shape(pred_p)+ tm_raster(style="cont",alpha=0.9, title="p")+
+  tm_legend(position = c("left", "top"), 
+            frame = TRUE,outside = FALSE,
+            bg.color="white")+
+  tm_shape(mtl_p) + tm_borders()+
+  tm_shape(subway_p) + tm_lines(col='red',lwd=3)+
+  tm_shape(subway_stop_p) + tm_symbols(col='blue',size=0.2)+
+ tmap_std
+}
+```
+
+# Plex Longitudinal price model: Plateau, Ahuntsic, Rosemont, Villeray
+Finally, using the same idea that was used for tracking condo price during the year, 
+I can track plexes prices in the boroughs that were interesting for me
+
+```{r plex_longitudinal1, eval=TRUE, echo=FALSE}
+# Select only a few boroughs
+ROI_p<-ROI_p%>%filter(arr %in% c('Plateau','Villeray','Rosemont','Ahuntsic'))
+
+# select only property in these ROI
+prop_interesting <- prop_geo_p %>% st_join(ROI_p,left=F) %>%
+  as.data.frame() %>% 
+  filter(type != "House", 
+         price>0, area_interior<10000, area_interior>500) %>% 
+  mutate(type=droplevels(type), arr=droplevels(arr),
+         parking=as.factor(parking>0))
+
+# determine start and end date for each property type for each area
+prop_interesting_lim <- prop_interesting %>% 
+  as.data.frame() %>% group_by(arr, type) %>% 
+  summarize( begin_date=min(start_date), 
+               end_date=max(start_date) )
+
+model_psqft_arr_t <- gam(price_sqft ~ type+arr+parking + 
+  s(start_date, by=type, k=6) + s(start_date, by=arr, k=6),
+          data=prop_interesting, bs="cr",
+          family=fam, method='REML')
+
+print(summary(model_psqft_arr_t))
+
+# calculate regression values
+
+simul<-expand.grid(type=levels(prop_interesting$type),
+                   arr=levels(prop_interesting$arr),
+                   parking=c(T),
+                   first_ts=seq(min(neighbors_$first_ts), max(neighbors_$first_ts),by='day'))%>%
+  mutate(start_date=as.numeric(first_ts)) %>%
+  inner_join(prop_interesting_lim, by=c('type','arr') ) %>% 
+  filter(start_date>=begin_date,start_date<=end_date)
+
+# predict price
+res<-predict(model_psqft_arr_t, newdata=simul, se.fit=T)
+simul$price_sqft<-ilink(res$fit)
+simul$price_sqft_upr<-ilink(res$fit+2*res$se.fit)
+simul$price_sqft_lwr<-ilink(res$fit-2*res$se.fit)
+
+ggplot(simul, aes(x=first_ts, y=price_sqft, ymin=price_sqft_lwr, ymax=price_sqft_upr))+
+  facet_grid(type~arr)+
+  ylab('price/sqft')+xlab('Date')+
+  geom_line()+geom_ribbon(alpha=0.4,lty=2)+
+  scale_x_date()+
+  theme(
+        axis.text.x =element_text(angle=60, hjust=1, size=12)
+    )
+```
+
+# Conclusions
+I did this research to study the distribution of prices in Montreal and to familiarize myself with geospatial
+modelling in R. I didn't have access to the actual sale prices, so the results should be taken with a grain 
+of salt. 
+
+# Source code and data
+The complete source of all scripts used for this publication is publicly available on github: (https://github.com/vfonov/re_mtl) , version of this article rendered using [rmarkdown](https://rmarkdown.rstudio.com/) is available at http://www.ilmarin.info/re_mtl/stats_eng.html
+
+# Interactive map of prices distribution
+Results are also shown in an interactive dashboard on (http://www.ilmarin.info/re_mtl/)
